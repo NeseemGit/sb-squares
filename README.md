@@ -83,16 +83,46 @@ The app will be available at the Amplify app URL.
 
 1. **App settings** → Confirm **Repository** is connected to your GitHub repo and the correct branch (e.g. `main`).
 2. **Environment variables** → Amplify provides `AWS_BRANCH` and `AWS_APP_ID` automatically; you don’t need to add them.
-3. **Build settings** → Your repo’s `amplify.yml` is used. The preBuild runs `npx @aws-amplify/backend-cli pipeline-deploy` (deploys backend and generates real `amplify_outputs.json` for the build), then `npm run build`.
+3. **Build settings** → Your repo’s `amplify.yml` is used. The preBuild runs `npx ampx pipeline-deploy` (deploys backend and generates real `amplify_outputs.json` for the build), then `npm run build`.
 4. **Redeploy** → If the first build failed or you changed the backend, trigger a new deploy from the Amplify Console. After it succeeds, open the app URL from the console.
 
 The npm peer dependency warnings during `npm ci` are normal and don’t stop the build.
+
+### Amplify build keeps failing? Pick one path
+
+**Option A – Get the app live in ~5 minutes (no IAM fix)**  
+Use your existing backend config so the build only runs `npm run build` (no `pipeline-deploy`). Your app will use the backend that your current `amplify_outputs.json` points to (e.g. from sandbox).
+
+1. In **amplify.yml**, remove or comment out this line:  
+   `- npx ampx pipeline-deploy --branch $AWS_BRANCH --app-id $AWS_APP_ID`
+2. Commit your **real** `amplify_outputs.json` (the one from sandbox, 400+ lines):  
+   `git add amplify_outputs.json && git commit -m "Use existing backend config for deploy" && git push`
+3. Trigger a new deploy in Amplify. The build will run `npm ci` and `npm run build` only, and the app will go live using that backend.
+
+You can add `pipeline-deploy` back later and fix the build role when you want the pipeline to deploy the backend.
+
+**Option B – Fix it once so pipeline-deploy works**  
+One-time setup so every deploy can run `pipeline-deploy` and generate a fresh backend.
+
+1. **Bootstrap (if needed)**  
+   In **CloudFormation** (us-east-1) check for stack **CDKToolkit**. If it’s missing, as root/admin run:  
+   `cdk bootstrap aws://YOUR_ACCOUNT_ID/us-east-1`
+2. **Give the build role full backend permissions**  
+   **IAM** → **Roles** → open the role from the build error (e.g. `AmplifySSRLoggingRole-…`).  
+   **Add permissions** → **Attach policies** → attach **`AmplifyBackendDeployFullAccess`**.  
+   (If you only added an SSM policy before, this policy adds S3/CDK/CloudFormation and is what pipeline-deploy needs.)
+3. Redeploy in Amplify.
 
 ### Build keeps failing on Amplify Hosting
 
 1. **Get the actual error** – In Amplify Console → your app → the failed deployment → open the **Build** step and scroll to the **red / failed** line. Copy the error message (and a few lines above). That tells you whether the failure is in `pipeline-deploy` (backend) or `npm run build` (frontend).
 
 2. **Common causes and fixes:**
+   - **`BootstrapDetectionError` / `AccessDeniedException` for `ssm:GetParameter` on `/cdk-bootstrap/*`:** The Amplify **build** role (e.g. the one named like `AmplifySSRLoggingRole-…` in the error) must be allowed to read the CDK bootstrap SSM parameter. In **AWS Console** → **IAM** → **Roles** → open the role used by your Amplify app for the build (see **Amplify Console** → **App settings** → **General** → **Service role** if shown, or use the role name from the error). Add an inline policy or attach a policy that allows:
+     - **Action:** `ssm:GetParameter`
+     - **Resource:** `arn:aws:ssm:*:*:parameter/cdk-bootstrap/*`
+     Then redeploy.
+   - **`CDKAssetPublishError` / “Failed to publish asset”:** CDK could not upload assets (e.g. Lambda code) to the bootstrap S3 bucket. Do both: (1) **Bootstrap the account/region** if not done: in AWS (as root or admin) run `cdk bootstrap aws://ACCOUNT_ID/us-east-1` or use Amplify’s “Initialize setup now” when prompted. (2) **Give the Amplify build role full backend deploy permissions**: attach the managed policy **`AmplifyBackendDeployFullAccess`** to the role used for the build (e.g. `AmplifySSRLoggingRole-…` in IAM). That policy allows publishing to the CDK assets bucket and deploying CloudFormation. Then redeploy.
    - **`pipeline-deploy` fails (e.g. CDK / CloudFormation):** Ensure the app was created as a **Gen 2** app and is connected to the repo. In **App settings** → **General**, confirm a **Service role** is set and that the app is not “Hosting only” if you use a backend. If you see “region not bootstrapped” or CDK errors, the account/region may need [CDK bootstrap](https://docs.aws.amazon.com/cdk/v2/guide/bootstrapping.html); Amplify’s first-time flow may prompt you to “Initialize setup now” in the console.
    - **`npm run build` fails (Next.js / TypeScript):** The same code should build locally (`npm run build`). If it passes locally but fails in Amplify, compare Node version (we use Node 20 in `amplify.yml` via `nvm use 20`) and fix any path or env differences.
    - **Out of memory:** The build spec sets `NODE_OPTIONS=--max-old-space-size=4096` for the build step. If the build still runs out of memory, in Amplify Console → **Build settings** → **Build image settings** you can try a larger build image if available.
@@ -118,7 +148,7 @@ Your `amplify_outputs.json` has **placeholders** until you use a real backend:
 The docs say `npx ampx sandbox`, but the unscoped npm package **ampx** is not the Amplify CLI. Use the scoped CLI instead:
 
 - **Local:** `npm run sandbox` (uses project’s `@aws-amplify/backend-cli`) or `npx @aws-amplify/backend-cli sandbox`
-- **CI (amplify.yml):** The repo uses `npx @aws-amplify/backend-cli pipeline-deploy` so the build uses the correct CLI.
+- **CI (amplify.yml):** The repo uses `npx ampx pipeline-deploy` so the build uses the correct CLI (ampx from `@aws-amplify/backend-cli` in node_modules).
 
 ### Sandbox runs but region not bootstrapped
 
