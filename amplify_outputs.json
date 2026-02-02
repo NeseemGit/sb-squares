@@ -1,0 +1,25 @@
+{
+  "version": "1",
+  "auth": {
+    "aws_region": "us-east-1",
+    "user_pool_id": "PLACEHOLDER_RUN_AMPX_SANDBOX",
+    "user_pool_client_id": "PLACEHOLDER_RUN_AMPX_SANDBOX",
+    "identity_pool_id": "PLACEHOLDER_RUN_AMPX_SANDBOX",
+    "username_attributes": ["email"],
+    "user_verification_types": ["email"],
+    "password_policy": {
+      "min_length": 8,
+      "require_lowercase": true,
+      "require_uppercase": true,
+      "require_numbers": true,
+      "require_symbols": true
+    }
+  },
+  "data": {
+    "aws_region": "us-east-1",
+    "url": "https://PLACEHOLDER.appsync-api.us-east-1.amazonaws.com/graphql",
+    "default_authorization_type": "AMAZON_COGNITO_USER_POOLS",
+    "authorization_types": ["AMAZON_COGNITO_USER_POOLS", "API_KEY"],
+    "api_key": "PLACEHOLDER"
+  }
+}
