@@ -73,7 +73,7 @@ export default function PoolDetailPage() {
     setError(null);
     try {
       const { getCurrentUser } = await import("aws-amplify/auth");
-      const { user } = await getCurrentUser();
+      const user = await getCurrentUser();
       const userId = user?.userId ?? "";
       const name = user?.signInDetails?.loginId ?? "Me";
       await client.models.Square.update({
