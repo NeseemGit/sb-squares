@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useAuthenticator } from "@aws-amplify/ui-react";
+import { useBackendConfigured } from "./AmplifyProvider";
 import { AuthGuard } from "./AuthGuard";
 
-export function HeaderNav() {
+function HeaderNavWithAuth() {
   const { signOut } = useAuthenticator((context) => [context.signOut]);
 
   return (
@@ -55,4 +56,39 @@ export function HeaderNav() {
       </AuthGuard>
     </nav>
   );
+}
+
+function HeaderNavWithoutAuth() {
+  return (
+    <nav className="flex items-center gap-6">
+      <Link
+        href="/pools"
+        className="text-slate-300 transition hover:text-white"
+      >
+        Pools
+      </Link>
+      <Link
+        href="/login"
+        className="text-slate-300 transition hover:text-white"
+      >
+        Log in
+      </Link>
+      <Link
+        href="/signup"
+        className="rounded-lg bg-amber-600 px-4 py-2 font-medium text-white transition hover:bg-amber-500"
+      >
+        Sign up
+      </Link>
+    </nav>
+  );
+}
+
+export function HeaderNav() {
+  const configured = useBackendConfigured();
+
+  if (configured) {
+    return <HeaderNavWithAuth />;
+  }
+
+  return <HeaderNavWithoutAuth />;
 }

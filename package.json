@@ -10,7 +10,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "sandbox": "ampx sandbox --no-browser"
+    "sandbox": "ampx sandbox",
+    "sandbox:npx": "npx @aws-amplify/backend-cli sandbox"
   },
   "dependencies": {
     "@aws-amplify/core": "^6.16.0",
@@ -23,6 +24,7 @@
   },
   "devDependencies": {
     "@aws-amplify/backend": "^1.20.0",
+    "@aws-amplify/backend-cli": "^1.6.0",
     "@types/node": "^22.10.0",
     "@types/react": "^19.2.10",
     "@types/react-dom": "^19.2.3",
