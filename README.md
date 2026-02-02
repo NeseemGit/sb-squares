@@ -73,7 +73,7 @@ After that, they can use the **Admin** page to create pools and initialize grids
 1. Push the repo to **GitHub** (or another supported provider).
 2. In **AWS Amplify Console** → **New app** → **Host web app** → connect the repo and branch (or use the app above).
 3. Amplify will use the repo’s `amplify.yml` to:
-   - Run `npx ampx pipeline-deploy` (backend)
+   - Use Node 20, run `npm ci`, then `npx @aws-amplify/backend-cli pipeline-deploy` (backend)
    - Run `npm run build` (Next.js)
 4. For existing branches, ensure the branch has been deployed at least once so `amplify_outputs.json` is generated for the frontend build.
 
@@ -87,6 +87,18 @@ The app will be available at the Amplify app URL.
 4. **Redeploy** → If the first build failed or you changed the backend, trigger a new deploy from the Amplify Console. After it succeeds, open the app URL from the console.
 
 The npm peer dependency warnings during `npm ci` are normal and don’t stop the build.
+
+### Build keeps failing on Amplify Hosting
+
+1. **Get the actual error** – In Amplify Console → your app → the failed deployment → open the **Build** step and scroll to the **red / failed** line. Copy the error message (and a few lines above). That tells you whether the failure is in `pipeline-deploy` (backend) or `npm run build` (frontend).
+
+2. **Common causes and fixes:**
+   - **`pipeline-deploy` fails (e.g. CDK / CloudFormation):** Ensure the app was created as a **Gen 2** app and is connected to the repo. In **App settings** → **General**, confirm a **Service role** is set and that the app is not “Hosting only” if you use a backend. If you see “region not bootstrapped” or CDK errors, the account/region may need [CDK bootstrap](https://docs.aws.amazon.com/cdk/v2/guide/bootstrapping.html); Amplify’s first-time flow may prompt you to “Initialize setup now” in the console.
+   - **`npm run build` fails (Next.js / TypeScript):** The same code should build locally (`npm run build`). If it passes locally but fails in Amplify, compare Node version (we use Node 20 in `amplify.yml` via `nvm use 20`) and fix any path or env differences.
+   - **Out of memory:** The build spec sets `NODE_OPTIONS=--max-old-space-size=4096` for the build step. If the build still runs out of memory, in Amplify Console → **Build settings** → **Build image settings** you can try a larger build image if available.
+   - **`AWS_BRANCH` or `AWS_APP_ID` missing:** Amplify injects these; you don’t add them. If the log shows them as empty, confirm the branch is connected and the app ID is correct (e.g. `dxw97vvx5ifhn`).
+
+3. **First deploy:** The very first run of `pipeline-deploy` can take several minutes and may require the Amplify app to be fully created and the service role to have backend deploy permissions.
 
 ## Troubleshooting
 
