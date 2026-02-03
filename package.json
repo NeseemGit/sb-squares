@@ -10,7 +10,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "sandbox": "ampx sandbox",
+    "sandbox": "node -e \"require('fs').rmSync('.amplify/artifacts/cdk.out', { recursive: true, force: true })\" 2>/dev/null; ampx sandbox",
     "sandbox:npx": "npx @aws-amplify/backend-cli sandbox"
   },
   "dependencies": {
@@ -25,12 +25,13 @@
   },
   "devDependencies": {
     "@aws-amplify/backend": "^1.20.0",
+    "@tailwindcss/postcss": "^4.1.18",
+    "@types/aws-lambda": "^8.10.160",
     "@types/node": "^22.10.0",
     "@types/react": "^19.2.10",
     "@types/react-dom": "^19.2.3",
     "eslint": "^9.16.0",
     "eslint-config-next": "^16.1.6",
-    "@tailwindcss/postcss": "^4.1.18",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.18",
     "typescript": "^5.9.3"

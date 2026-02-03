@@ -28,3 +28,25 @@
 body {
   @apply bg-slate-950 text-slate-100 antialiased;
 }
+
+/* Links and actions show pointer cursor */
+a,
+button,
+[type="button"],
+[type="submit"],
+[type="reset"],
+[role="button"] {
+  cursor: pointer;
+}
+
+/* Pool grid: smaller on mobile, full size on sm+ */
+.pool-grid-wrapper {
+  --pool-label-size: 1.75rem;
+  --pool-cell-size: 3rem;
+}
+@media (min-width: 640px) {
+  .pool-grid-wrapper {
+    --pool-label-size: 2.5rem;
+    --pool-cell-size: 4.5rem;
+  }
+}

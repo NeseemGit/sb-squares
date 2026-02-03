@@ -1,9 +1,9 @@
 {
   "auth": {
-    "user_pool_id": "us-east-1_FcQ8AWjN0",
+    "user_pool_id": "us-east-1_3wfP0iW1N",
     "aws_region": "us-east-1",
-    "user_pool_client_id": "2qdvkb3ksf8p1oj76ramsgrjse",
-    "identity_pool_id": "us-east-1:9ce49dda-8c76-4d1c-b8d9-7ee9beadf633",
+    "user_pool_client_id": "4sg9qdic1angie07j1rv9h33dj",
+    "identity_pool_id": "us-east-1:cc2ac09e-1ef9-4eee-a106-3db229fbaa3d",
     "mfa_methods": [],
     "standard_required_attributes": [
       "email"
@@ -26,9 +26,9 @@
     "unauthenticated_identities_enabled": true
   },
   "data": {
-    "url": "https://o64him7sqvfspkv2zkk5jaq3sm.appsync-api.us-east-1.amazonaws.com/graphql",
+    "url": "https://hkmxwgjucrfc5pkjj3aqic3ib4.appsync-api.us-east-1.amazonaws.com/graphql",
     "aws_region": "us-east-1",
-    "api_key": "da2-m7qihod4hvbdvi6zlyjn7k7xym",
+    "api_key": "da2-vjlhuedfxffaxlukc2uhcvks44",
     "default_authorization_type": "AMAZON_COGNITO_USER_POOLS",
     "authorization_types": [
       "API_KEY",
@@ -75,12 +75,75 @@
               "isRequired": true,
               "attributes": []
             },
+            "pricePerSquare": {
+              "name": "pricePerSquare",
+              "isArray": false,
+              "type": "Float",
+              "isRequired": false,
+              "attributes": []
+            },
             "status": {
               "name": "status",
               "isArray": false,
               "type": {
                 "enum": "PoolStatus"
               },
+              "isRequired": false,
+              "attributes": []
+            },
+            "rowNumbers": {
+              "name": "rowNumbers",
+              "isArray": false,
+              "type": "String",
+              "isRequired": false,
+              "attributes": []
+            },
+            "colNumbers": {
+              "name": "colNumbers",
+              "isArray": false,
+              "type": "String",
+              "isRequired": false,
+              "attributes": []
+            },
+            "numbersRevealed": {
+              "name": "numbersRevealed",
+              "isArray": false,
+              "type": "Boolean",
+              "isRequired": false,
+              "attributes": []
+            },
+            "winningSquares": {
+              "name": "winningSquares",
+              "isArray": false,
+              "type": "String",
+              "isRequired": false,
+              "attributes": []
+            },
+            "teamRowName": {
+              "name": "teamRowName",
+              "isArray": false,
+              "type": "String",
+              "isRequired": false,
+              "attributes": []
+            },
+            "teamColName": {
+              "name": "teamColName",
+              "isArray": false,
+              "type": "String",
+              "isRequired": false,
+              "attributes": []
+            },
+            "commishNotes": {
+              "name": "commishNotes",
+              "isArray": false,
+              "type": "String",
+              "isRequired": false,
+              "attributes": []
+            },
+            "prizePayouts": {
+              "name": "prizePayouts",
+              "isArray": false,
+              "type": "String",
               "isRequired": false,
               "attributes": []
             },
@@ -376,6 +439,16 @@
             {
               "type": "model",
               "properties": {}
+            },
+            {
+              "type": "key",
+              "properties": {
+                "name": "userProfilesByUserId",
+                "queryField": "listUserProfileByUserId",
+                "fields": [
+                  "userId"
+                ]
+              }
             },
             {
               "type": "auth",

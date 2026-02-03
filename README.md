@@ -102,16 +102,7 @@ Use your existing backend config so the build only runs `npm run build` (no `pip
 You can add `pipeline-deploy` back later and fix the build role when you want the pipeline to deploy the backend.
 
 **Option B – Fix it once so pipeline-deploy works**  
-One-time setup so every deploy can run `pipeline-deploy` and generate a fresh backend.
-
-1. **Bootstrap (if needed)**  
-   In **CloudFormation** (us-east-1) check for stack **CDKToolkit**. If it’s missing, as root/admin run:  
-   `cdk bootstrap aws://YOUR_ACCOUNT_ID/us-east-1`
-2. **Give the build role full backend permissions**  
-   **IAM** → **Roles** → open the role from the build error (e.g. `AmplifySSRLoggingRole-…`).  
-   **Add permissions** → **Attach policies** → attach **`AmplifyBackendDeployFullAccess`**.  
-   (If you only added an SSM policy before, this policy adds S3/CDK/CloudFormation and is what pipeline-deploy needs.)
-3. Redeploy in Amplify.
+See **[Fix the backend deploy](#fix-the-backend-deploy)** below for the full checklist.
 
 ### Build keeps failing on Amplify Hosting
 
@@ -129,6 +120,51 @@ One-time setup so every deploy can run `pipeline-deploy` and generate a fresh ba
    - **`AWS_BRANCH` or `AWS_APP_ID` missing:** Amplify injects these; you don’t add them. If the log shows them as empty, confirm the branch is connected and the app ID is correct (e.g. `dxw97vvx5ifhn`).
 
 3. **First deploy:** The very first run of `pipeline-deploy` can take several minutes and may require the Amplify app to be fully created and the service role to have backend deploy permissions.
+
+### Fix the backend deploy
+
+One-time setup so CI can run `pipeline-deploy` and deploy your Gen 2 backend. Do these in order.
+
+1. **Find your Amplify build role**  
+   **Amplify Console** → your app (`dxw97vvx5ifhn`) → **App settings** → **General** → note the **Service role** (e.g. `AmplifySSRLoggingRole-…`).  
+   Or use the role name from a failed build log: `User: arn:aws:sts::...:assumed-role/ROLE_NAME/BuildSession`.
+
+2. **Bootstrap the account/region (if needed)**  
+   **AWS Console** → **CloudFormation** → region **us-east-1** → **Stacks** → look for **CDKToolkit** (or **cdk-hnb659fds**).  
+   - **If it exists:** go to step 3.  
+   - **If it doesn’t:** as **root** or a user with **AdministratorAccess**, in a terminal run (replace with your account ID):
+     ```bash
+     cdk bootstrap aws://YOUR_ACCOUNT_ID/us-east-1
+     ```
+     Or sign in as root/admin, open Amplify, and complete **Initialize setup now** if the app prompts you.
+
+3. **Attach the backend deploy policy to the build role**  
+   **IAM** → **Roles** → search for the role from step 1 → open it.  
+   **Add permissions** → **Attach policies** → search **`AmplifyBackendDeployFullAccess`** → check it → **Add permissions**.  
+   This lets the role run CDK deploy (S3, CloudFormation, assume CDK roles).
+
+4. **If you still get “BootstrapDetectionError” / “ssm:GetParameter” on `/cdk-bootstrap/*`**  
+   On the **same** role: **Add permissions** → **Create inline policy** → **JSON** → paste:
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Effect": "Allow",
+         "Action": "ssm:GetParameter",
+         "Resource": "arn:aws:ssm:*:*:parameter/cdk-bootstrap/*"
+       }
+     ]
+   }
+   ```
+   Name it (e.g. `CDKBootstrapRead`) → **Create policy**.
+
+5. **Turn pipeline-deploy back on**  
+   In **amplify.yml**, uncomment the line:
+   ```yaml
+   - npx ampx pipeline-deploy --branch $AWS_BRANCH --app-id $AWS_APP_ID
+   ```
+   Commit and push. Trigger a new deploy in Amplify. The build will run pipeline-deploy then `npm run build`; when it succeeds, the backend is deployed by CI and `amplify_outputs.json` is generated for that build.
 
 ## Troubleshooting
 

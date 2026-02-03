@@ -1,0 +1,50 @@
+type Pool @model @auth(rules: [{allow: public, provider: apiKey, operations: [read]},
+  {allow: private, operations: [read]},
+  {allow: groups, operations: [read, create, update, delete], groups: ["Admins"]}])
+{
+  name: String!
+  description: String
+  eventDate: String!
+  gridSize: Int!
+  pricePerSquare: Float
+  status: PoolStatus
+  rowNumbers: String
+  colNumbers: String
+  numbersRevealed: Boolean
+  winningSquares: String
+  teamRowName: String
+  teamColName: String
+  commishNotes: String
+  prizePayouts: String
+  squares: [Square] @hasMany(references: ["poolId"])
+}
+
+type Square @model @auth(rules: [{allow: public, provider: apiKey, operations: [read]},
+  {allow: private, operations: [read, update]},
+  {allow: groups, operations: [read, create, update, delete], groups: ["Admins"]}])
+{
+  poolId: ID! @index(queryField: "listSquareByPoolId")
+  pool: Pool @belongsTo(references: ["poolId"])
+  row: Int!
+  col: Int!
+  rowNumber: Int
+  colNumber: Int
+  ownerId: String
+  ownerName: String
+  claimedAt: String
+}
+
+type UserProfile @model @auth(rules: [{allow: owner, ownerField: "owner"},
+  {allow: groups, operations: [read, create, update, delete], groups: ["Admins"]}])
+{
+  userId: String! @index(queryField: "listUserProfileByUserId")
+  displayName: String!
+  email: String!
+}
+
+enum PoolStatus {
+  DRAFT
+  OPEN
+  CLOSED
+  COMPLETED
+}

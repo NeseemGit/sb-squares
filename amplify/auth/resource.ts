@@ -9,10 +9,4 @@ export const auth = defineAuth({
         `Your SB Squares verification code is: ${createCode()}`,
     },
   },
-  userAttributes: {
-    preferredUsername: {
-      mutable: true,
-      required: false,
-    },
-  },
 });

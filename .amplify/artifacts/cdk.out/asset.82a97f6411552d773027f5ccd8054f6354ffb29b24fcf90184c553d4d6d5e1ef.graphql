@@ -1,0 +1,501 @@
+type Pool @aws_api_key @aws_iam @aws_cognito_user_pools {
+  name: String!
+  description: String
+  eventDate: String!
+  gridSize: Int!
+  pricePerSquare: Float
+  status: PoolStatus
+  rowNumbers: String
+  colNumbers: String
+  numbersRevealed: Boolean
+  winningSquares: String
+  teamRowName: String
+  teamColName: String
+  commishNotes: String
+  prizePayouts: String
+  squares(filter: ModelSquareFilterInput, sortDirection: ModelSortDirection, limit: Int, nextToken: String): ModelSquareConnection
+  id: ID!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type Square @aws_api_key @aws_iam @aws_cognito_user_pools {
+  poolId: ID!
+  pool: Pool
+  row: Int!
+  col: Int!
+  rowNumber: Int
+  colNumber: Int
+  ownerId: String
+  ownerName: String
+  claimedAt: String
+  id: ID!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type UserProfile @aws_iam @aws_cognito_user_pools {
+  userId: String!
+  displayName: String!
+  email: String!
+  id: ID!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+  owner: String
+}
+
+enum PoolStatus {
+  DRAFT
+  OPEN
+  CLOSED
+  COMPLETED
+}
+
+input AmplifyAIConversationTurnErrorInput {
+  errorType: String!
+  message: String!
+}
+
+input ModelStringInput {
+  ne: String
+  eq: String
+  le: String
+  lt: String
+  ge: String
+  gt: String
+  contains: String
+  notContains: String
+  between: [String]
+  beginsWith: String
+  attributeExists: Boolean
+  attributeType: ModelAttributeTypes
+  size: ModelSizeInput
+}
+
+input ModelIntInput {
+  ne: Int
+  eq: Int
+  le: Int
+  lt: Int
+  ge: Int
+  gt: Int
+  between: [Int]
+  attributeExists: Boolean
+  attributeType: ModelAttributeTypes
+}
+
+input ModelFloatInput {
+  ne: Float
+  eq: Float
+  le: Float
+  lt: Float
+  ge: Float
+  gt: Float
+  between: [Float]
+  attributeExists: Boolean
+  attributeType: ModelAttributeTypes
+}
+
+input ModelBooleanInput {
+  ne: Boolean
+  eq: Boolean
+  attributeExists: Boolean
+  attributeType: ModelAttributeTypes
+}
+
+input ModelIDInput {
+  ne: ID
+  eq: ID
+  le: ID
+  lt: ID
+  ge: ID
+  gt: ID
+  contains: ID
+  notContains: ID
+  between: [ID]
+  beginsWith: ID
+  attributeExists: Boolean
+  attributeType: ModelAttributeTypes
+  size: ModelSizeInput
+}
+
+input ModelSubscriptionStringInput {
+  ne: String
+  eq: String
+  le: String
+  lt: String
+  ge: String
+  gt: String
+  contains: String
+  notContains: String
+  between: [String]
+  beginsWith: String
+  in: [String]
+  notIn: [String]
+}
+
+input ModelSubscriptionIntInput {
+  ne: Int
+  eq: Int
+  le: Int
+  lt: Int
+  ge: Int
+  gt: Int
+  between: [Int]
+  in: [Int]
+  notIn: [Int]
+}
+
+input ModelSubscriptionFloatInput {
+  ne: Float
+  eq: Float
+  le: Float
+  lt: Float
+  ge: Float
+  gt: Float
+  between: [Float]
+  in: [Float]
+  notIn: [Float]
+}
+
+input ModelSubscriptionBooleanInput {
+  ne: Boolean
+  eq: Boolean
+}
+
+input ModelSubscriptionIDInput {
+  ne: ID
+  eq: ID
+  le: ID
+  lt: ID
+  ge: ID
+  gt: ID
+  contains: ID
+  notContains: ID
+  between: [ID]
+  beginsWith: ID
+  in: [ID]
+  notIn: [ID]
+}
+
+enum ModelAttributeTypes {
+  binary
+  binarySet
+  bool
+  list
+  map
+  number
+  numberSet
+  string
+  stringSet
+  _null
+}
+
+input ModelSizeInput {
+  ne: Int
+  eq: Int
+  le: Int
+  lt: Int
+  ge: Int
+  gt: Int
+  between: [Int]
+}
+
+enum ModelSortDirection {
+  ASC
+  DESC
+}
+
+type ModelPoolConnection @aws_api_key @aws_iam @aws_cognito_user_pools {
+  items: [Pool]!
+  nextToken: String
+}
+
+input ModelPoolStatusInput {
+  eq: PoolStatus
+  ne: PoolStatus
+}
+
+input ModelPoolFilterInput {
+  name: ModelStringInput
+  description: ModelStringInput
+  eventDate: ModelStringInput
+  gridSize: ModelIntInput
+  pricePerSquare: ModelFloatInput
+  status: ModelPoolStatusInput
+  rowNumbers: ModelStringInput
+  colNumbers: ModelStringInput
+  numbersRevealed: ModelBooleanInput
+  winningSquares: ModelStringInput
+  teamRowName: ModelStringInput
+  teamColName: ModelStringInput
+  commishNotes: ModelStringInput
+  prizePayouts: ModelStringInput
+  id: ModelIDInput
+  createdAt: ModelStringInput
+  updatedAt: ModelStringInput
+  and: [ModelPoolFilterInput]
+  or: [ModelPoolFilterInput]
+  not: ModelPoolFilterInput
+}
+
+type Query {
+  getPool(id: ID!): Pool @aws_api_key @aws_iam @aws_cognito_user_pools
+  listPools(filter: ModelPoolFilterInput, limit: Int, nextToken: String): ModelPoolConnection @aws_api_key @aws_iam @aws_cognito_user_pools
+  getSquare(id: ID!): Square @aws_api_key @aws_iam @aws_cognito_user_pools
+  listSquares(filter: ModelSquareFilterInput, limit: Int, nextToken: String): ModelSquareConnection @aws_api_key @aws_iam @aws_cognito_user_pools
+  listSquareByPoolId(poolId: ID!, sortDirection: ModelSortDirection, filter: ModelSquareFilterInput, limit: Int, nextToken: String): ModelSquareConnection @aws_api_key @aws_iam @aws_cognito_user_pools
+  getUserProfile(id: ID!): UserProfile @aws_iam @aws_cognito_user_pools
+  listUserProfiles(filter: ModelUserProfileFilterInput, limit: Int, nextToken: String): ModelUserProfileConnection @aws_iam @aws_cognito_user_pools
+  listUserProfileByUserId(userId: String!, sortDirection: ModelSortDirection, filter: ModelUserProfileFilterInput, limit: Int, nextToken: String): ModelUserProfileConnection @aws_iam @aws_cognito_user_pools
+}
+
+input ModelPoolConditionInput {
+  name: ModelStringInput
+  description: ModelStringInput
+  eventDate: ModelStringInput
+  gridSize: ModelIntInput
+  pricePerSquare: ModelFloatInput
+  status: ModelPoolStatusInput
+  rowNumbers: ModelStringInput
+  colNumbers: ModelStringInput
+  numbersRevealed: ModelBooleanInput
+  winningSquares: ModelStringInput
+  teamRowName: ModelStringInput
+  teamColName: ModelStringInput
+  commishNotes: ModelStringInput
+  prizePayouts: ModelStringInput
+  and: [ModelPoolConditionInput]
+  or: [ModelPoolConditionInput]
+  not: ModelPoolConditionInput
+  createdAt: ModelStringInput
+  updatedAt: ModelStringInput
+}
+
+input CreatePoolInput {
+  name: String!
+  description: String
+  eventDate: String!
+  gridSize: Int!
+  pricePerSquare: Float
+  status: PoolStatus
+  rowNumbers: String
+  colNumbers: String
+  numbersRevealed: Boolean
+  winningSquares: String
+  teamRowName: String
+  teamColName: String
+  commishNotes: String
+  prizePayouts: String
+  id: ID
+}
+
+input UpdatePoolInput {
+  name: String
+  description: String
+  eventDate: String
+  gridSize: Int
+  pricePerSquare: Float
+  status: PoolStatus
+  rowNumbers: String
+  colNumbers: String
+  numbersRevealed: Boolean
+  winningSquares: String
+  teamRowName: String
+  teamColName: String
+  commishNotes: String
+  prizePayouts: String
+  id: ID!
+}
+
+input DeletePoolInput {
+  id: ID!
+}
+
+type Mutation {
+  createPool(input: CreatePoolInput!, condition: ModelPoolConditionInput): Pool @aws_iam @aws_cognito_user_pools
+  updatePool(input: UpdatePoolInput!, condition: ModelPoolConditionInput): Pool @aws_iam @aws_cognito_user_pools
+  deletePool(input: DeletePoolInput!, condition: ModelPoolConditionInput): Pool @aws_iam @aws_cognito_user_pools
+  createSquare(input: CreateSquareInput!, condition: ModelSquareConditionInput): Square @aws_iam @aws_cognito_user_pools
+  updateSquare(input: UpdateSquareInput!, condition: ModelSquareConditionInput): Square @aws_iam @aws_cognito_user_pools
+  deleteSquare(input: DeleteSquareInput!, condition: ModelSquareConditionInput): Square @aws_iam @aws_cognito_user_pools
+  createUserProfile(input: CreateUserProfileInput!, condition: ModelUserProfileConditionInput): UserProfile @aws_iam @aws_cognito_user_pools
+  updateUserProfile(input: UpdateUserProfileInput!, condition: ModelUserProfileConditionInput): UserProfile @aws_iam @aws_cognito_user_pools
+  deleteUserProfile(input: DeleteUserProfileInput!, condition: ModelUserProfileConditionInput): UserProfile @aws_iam @aws_cognito_user_pools
+}
+
+input ModelSubscriptionPoolFilterInput {
+  name: ModelSubscriptionStringInput
+  description: ModelSubscriptionStringInput
+  eventDate: ModelSubscriptionStringInput
+  gridSize: ModelSubscriptionIntInput
+  pricePerSquare: ModelSubscriptionFloatInput
+  status: ModelSubscriptionStringInput
+  rowNumbers: ModelSubscriptionStringInput
+  colNumbers: ModelSubscriptionStringInput
+  numbersRevealed: ModelSubscriptionBooleanInput
+  winningSquares: ModelSubscriptionStringInput
+  teamRowName: ModelSubscriptionStringInput
+  teamColName: ModelSubscriptionStringInput
+  commishNotes: ModelSubscriptionStringInput
+  prizePayouts: ModelSubscriptionStringInput
+  id: ModelSubscriptionIDInput
+  createdAt: ModelSubscriptionStringInput
+  updatedAt: ModelSubscriptionStringInput
+  and: [ModelSubscriptionPoolFilterInput]
+  or: [ModelSubscriptionPoolFilterInput]
+}
+
+type Subscription {
+  onCreatePool(filter: ModelSubscriptionPoolFilterInput): Pool @aws_subscribe(mutations: ["createPool"]) @aws_api_key @aws_iam @aws_cognito_user_pools
+  onUpdatePool(filter: ModelSubscriptionPoolFilterInput): Pool @aws_subscribe(mutations: ["updatePool"]) @aws_api_key @aws_iam @aws_cognito_user_pools
+  onDeletePool(filter: ModelSubscriptionPoolFilterInput): Pool @aws_subscribe(mutations: ["deletePool"]) @aws_api_key @aws_iam @aws_cognito_user_pools
+  onCreateSquare(filter: ModelSubscriptionSquareFilterInput): Square @aws_subscribe(mutations: ["createSquare"]) @aws_api_key @aws_iam @aws_cognito_user_pools
+  onUpdateSquare(filter: ModelSubscriptionSquareFilterInput): Square @aws_subscribe(mutations: ["updateSquare"]) @aws_api_key @aws_iam @aws_cognito_user_pools
+  onDeleteSquare(filter: ModelSubscriptionSquareFilterInput): Square @aws_subscribe(mutations: ["deleteSquare"]) @aws_api_key @aws_iam @aws_cognito_user_pools
+  onCreateUserProfile(filter: ModelSubscriptionUserProfileFilterInput, owner: String): UserProfile @aws_subscribe(mutations: ["createUserProfile"]) @aws_iam @aws_cognito_user_pools
+  onUpdateUserProfile(filter: ModelSubscriptionUserProfileFilterInput, owner: String): UserProfile @aws_subscribe(mutations: ["updateUserProfile"]) @aws_iam @aws_cognito_user_pools
+  onDeleteUserProfile(filter: ModelSubscriptionUserProfileFilterInput, owner: String): UserProfile @aws_subscribe(mutations: ["deleteUserProfile"]) @aws_iam @aws_cognito_user_pools
+}
+
+type ModelSquareConnection @aws_api_key @aws_iam @aws_cognito_user_pools {
+  items: [Square]!
+  nextToken: String
+}
+
+input ModelSquareFilterInput {
+  poolId: ModelIDInput
+  row: ModelIntInput
+  col: ModelIntInput
+  rowNumber: ModelIntInput
+  colNumber: ModelIntInput
+  ownerId: ModelStringInput
+  ownerName: ModelStringInput
+  claimedAt: ModelStringInput
+  id: ModelIDInput
+  createdAt: ModelStringInput
+  updatedAt: ModelStringInput
+  and: [ModelSquareFilterInput]
+  or: [ModelSquareFilterInput]
+  not: ModelSquareFilterInput
+}
+
+input ModelSquareConditionInput {
+  poolId: ModelIDInput
+  row: ModelIntInput
+  col: ModelIntInput
+  rowNumber: ModelIntInput
+  colNumber: ModelIntInput
+  ownerId: ModelStringInput
+  ownerName: ModelStringInput
+  claimedAt: ModelStringInput
+  and: [ModelSquareConditionInput]
+  or: [ModelSquareConditionInput]
+  not: ModelSquareConditionInput
+  createdAt: ModelStringInput
+  updatedAt: ModelStringInput
+}
+
+input CreateSquareInput {
+  poolId: ID!
+  row: Int!
+  col: Int!
+  rowNumber: Int
+  colNumber: Int
+  ownerId: String
+  ownerName: String
+  claimedAt: String
+  id: ID
+}
+
+input UpdateSquareInput {
+  poolId: ID
+  row: Int
+  col: Int
+  rowNumber: Int
+  colNumber: Int
+  ownerId: String
+  ownerName: String
+  claimedAt: String
+  id: ID!
+}
+
+input DeleteSquareInput {
+  id: ID!
+}
+
+input ModelSubscriptionSquareFilterInput {
+  poolId: ModelSubscriptionIDInput
+  row: ModelSubscriptionIntInput
+  col: ModelSubscriptionIntInput
+  rowNumber: ModelSubscriptionIntInput
+  colNumber: ModelSubscriptionIntInput
+  ownerId: ModelSubscriptionStringInput
+  ownerName: ModelSubscriptionStringInput
+  claimedAt: ModelSubscriptionStringInput
+  id: ModelSubscriptionIDInput
+  createdAt: ModelSubscriptionStringInput
+  updatedAt: ModelSubscriptionStringInput
+  and: [ModelSubscriptionSquareFilterInput]
+  or: [ModelSubscriptionSquareFilterInput]
+}
+
+type ModelUserProfileConnection @aws_iam @aws_cognito_user_pools {
+  items: [UserProfile]!
+  nextToken: String
+}
+
+input ModelUserProfileFilterInput {
+  userId: ModelStringInput
+  displayName: ModelStringInput
+  email: ModelStringInput
+  id: ModelIDInput
+  createdAt: ModelStringInput
+  updatedAt: ModelStringInput
+  and: [ModelUserProfileFilterInput]
+  or: [ModelUserProfileFilterInput]
+  not: ModelUserProfileFilterInput
+  owner: ModelStringInput
+}
+
+input ModelUserProfileConditionInput {
+  userId: ModelStringInput
+  displayName: ModelStringInput
+  email: ModelStringInput
+  and: [ModelUserProfileConditionInput]
+  or: [ModelUserProfileConditionInput]
+  not: ModelUserProfileConditionInput
+  createdAt: ModelStringInput
+  updatedAt: ModelStringInput
+  owner: ModelStringInput
+}
+
+input CreateUserProfileInput {
+  userId: String!
+  displayName: String!
+  email: String!
+  id: ID
+}
+
+input UpdateUserProfileInput {
+  userId: String
+  displayName: String
+  email: String
+  id: ID!
+}
+
+input DeleteUserProfileInput {
+  id: ID!
+}
+
+input ModelSubscriptionUserProfileFilterInput {
+  userId: ModelSubscriptionStringInput
+  displayName: ModelSubscriptionStringInput
+  email: ModelSubscriptionStringInput
+  id: ModelSubscriptionIDInput
+  createdAt: ModelSubscriptionStringInput
+  updatedAt: ModelSubscriptionStringInput
+  and: [ModelSubscriptionUserProfileFilterInput]
+  or: [ModelSubscriptionUserProfileFilterInput]
+  owner: ModelStringInput
+}
