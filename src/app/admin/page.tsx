@@ -43,6 +43,8 @@ function AdminContent() {
   /** Local values while editing pool name and description in the pools list. */
   const [editingName, setEditingName] = useState<Record<string, string>>({});
   const [editingDescription, setEditingDescription] = useState<Record<string, string>>({});
+  /** Pool id currently being deleted (for loading state). */
+  const [deletingPoolId, setDeletingPoolId] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -263,6 +265,23 @@ function AdminContent() {
       });
     } catch (e) {
       setError((e as Error).message);
+    }
+  };
+
+  const deletePool = async (poolId: string) => {
+    if (!confirm("Delete this pool and all its squares? This cannot be undone.")) return;
+    setDeletingPoolId(poolId);
+    setError(null);
+    try {
+      const { data: squares } = await client.models.Square.listSquareByPoolId({ poolId });
+      for (const sq of squares) {
+        await client.models.Square.delete({ id: sq.id });
+      }
+      await client.models.Pool.delete({ id: poolId });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setDeletingPoolId(null);
     }
   };
 
@@ -542,6 +561,15 @@ function AdminContent() {
                     >
                       View
                     </a>
+                    <button
+                      type="button"
+                      onClick={() => deletePool(pool.id)}
+                      disabled={deletingPoolId === pool.id}
+                      className="inline-flex h-9 shrink-0 items-center rounded-lg border border-red-800 bg-red-900/60 px-3 text-sm text-red-200 hover:bg-red-800 disabled:opacity-50"
+                      title="Delete pool and all squares"
+                    >
+                      {deletingPoolId === pool.id ? "Deleting…" : "Delete"}
+                    </button>
                     <button
                       type="button"
                       onClick={() => initSquares(pool.id, pool.gridSize)}

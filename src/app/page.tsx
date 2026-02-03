@@ -38,7 +38,7 @@ export default function HomePage() {
       {/* Hero */}
       <section className="text-center">
         <h1 className="mb-4 text-4xl font-bold tracking-tight text-white md:text-5xl">
-          SB Squares
+          DB Squares
         </h1>
         <p className="mb-8 text-lg text-slate-400">
           Create and join squares pools for the big game. Pick your squares,

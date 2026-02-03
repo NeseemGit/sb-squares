@@ -188,16 +188,30 @@ export default function PoolDetailPage() {
     setClaiming(key);
     setError(null);
     try {
+      const { fetchAuthSession } = await import("aws-amplify/auth");
+      const { tokens } = await fetchAuthSession();
+      const idToken = tokens?.idToken?.toString();
+      if (!idToken) {
+        setError("Session expired. Please sign in again.");
+        return;
+      }
+      const res = await fetch("/api/claim-square", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ squareId: existing.id, displayName: name }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error ?? `Request failed (${res.status})`);
+        return;
+      }
+      const claimedAt = new Date().toISOString();
       const { getCurrentUser } = await import("aws-amplify/auth");
       const user = await getCurrentUser();
       const userId = user?.userId ?? "";
-      const claimedAt = new Date().toISOString();
-      await client.models.Square.update({
-        id: existing.id,
-        ownerId: userId,
-        ownerName: name,
-        claimedAt,
-      });
       setSquares((prev) =>
         prev.map((s) =>
           s.id === existing.id
@@ -266,12 +280,30 @@ export default function PoolDetailPage() {
     setUnclaiming(key);
     setError(null);
     try {
-      await client.models.Square.update({
-        id: existing.id,
-        ownerId: "",
-        ownerName: "",
-        claimedAt: "",
+      const { fetchAuthSession } = await import("aws-amplify/auth");
+      const { tokens } = await fetchAuthSession();
+      const idToken = tokens?.idToken?.toString();
+      if (!idToken) {
+        setError("Session expired. Please sign in again.");
+        return;
+      }
+      const accessToken = tokens?.accessToken?.toString();
+      const res = await fetch("/api/unclaim-square", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          squareId: existing.id,
+          ...(accessToken ? { accessToken } : {}),
+        }),
       });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error ?? `Request failed (${res.status})`);
+        return;
+      }
       pendingUnclaimIds.current.add(existing.id);
       setTimeout(() => pendingUnclaimIds.current.delete(existing.id), 5000);
       setSquares((prev) =>

@@ -1,4 +1,10 @@
-import { type ClientSchema, a, defineData } from "@aws-amplify/backend";
+import { type ClientSchema, a, defineData, defineFunction } from "@aws-amplify/backend";
+
+export const squareAuthorizerFn = defineFunction({
+  name: "square-authorizer",
+  entry: "./square-authorizer.ts",
+  resourceGroupName: "data",
+});
 
 const schema = a.schema({
   Pool: a
@@ -34,6 +40,7 @@ const schema = a.schema({
       allow.group("Admins").to(["read", "create", "update", "delete"]),
     ]),
 
+  /** Square: read by all (apiKey); update via Lambda authorizer (claim unclaimed, unclaim own) or Admins (full access – Admins can edit any user's squares using userPool auth). */
   Square: a
     .model({
       poolId: a.id().required(),
@@ -48,8 +55,8 @@ const schema = a.schema({
     })
     .authorization((allow) => [
       allow.publicApiKey().to(["read"]),
-      allow.authenticated().to(["read", "update"]),
-      allow.group("Admins").to(["read", "create", "update", "delete"]),
+      allow.custom("function"), // Lambda authorizer (see lambdaAuthorizationMode); rules OR'd with group
+      allow.group("Admins").to(["read", "create", "update", "delete"]), // Admins use userPool, can edit any square
     ])
     .secondaryIndexes((index) => [index("poolId")]),
 
@@ -74,6 +81,10 @@ export const data = defineData({
     defaultAuthorizationMode: "userPool",
     apiKeyAuthorizationMode: {
       expiresInDays: 30,
+    },
+    lambdaAuthorizationMode: {
+      function: squareAuthorizerFn,
+      timeToLiveInSeconds: 300,
     },
   },
 });

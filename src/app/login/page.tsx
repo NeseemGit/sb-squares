@@ -38,7 +38,7 @@ export default function LoginPage() {
     <div className="mx-auto flex min-h-[80vh] max-w-md items-center justify-center px-4">
       <div className="w-full">
         <h1 className="mb-2 text-center text-xl font-semibold text-white">
-          Log in to SB Squares
+          Log in to DB Squares
         </h1>
         <form
           onSubmit={handleSubmit}

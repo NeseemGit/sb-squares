@@ -1,3 +1,7 @@
+# Amplify build artifacts
+.amplify/
+amplify_outputs.json
+
 # Dependencies
 node_modules
 .pnp

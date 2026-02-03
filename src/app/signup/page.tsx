@@ -149,7 +149,7 @@ export default function SignUpPage() {
     <div className="mx-auto flex min-h-[80vh] max-w-md items-center justify-center px-4">
       <div className="w-full">
         <h1 className="mb-2 text-center text-xl font-semibold text-white">
-          Create your SB Squares account
+          Create your DB Squares account
         </h1>
         <form
           onSubmit={handleSignUp}

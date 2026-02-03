@@ -22,7 +22,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SB Squares – Super Bowl Squares Pools",
+  title: "DB Squares – Super Bowl Squares Pools",
   description: "Create and join squares pools for the big game.",
 };
 
@@ -39,7 +39,7 @@ export default function RootLayout({
             <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur">
               <div className="mx-auto flex min-h-16 max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
                 <Link href="/" className="text-xl font-bold text-amber-400">
-                  SB Squares
+                  DB Squares
                 </Link>
                 <HeaderNav />
               </div>

@@ -4,9 +4,9 @@ export const auth = defineAuth({
   loginWith: {
     email: {
       verificationEmailStyle: "CODE",
-      verificationEmailSubject: "SB Squares – verify your email",
+      verificationEmailSubject: "DB Squares – verify your email",
       verificationEmailBody: (createCode) =>
-        `Your SB Squares verification code is: ${createCode()}`,
+        `Your DB Squares verification code is: ${createCode()}`,
     },
   },
 });

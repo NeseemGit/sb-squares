@@ -1,4 +1,4 @@
-# SB Squares
+# DB Squares
 
 Super Bowl (or event) squares pool app built with **Next.js 15**, **Tailwind CSS v4**, and **AWS Amplify Gen 2**. Deployable on **Amplify Hosting**.
 
