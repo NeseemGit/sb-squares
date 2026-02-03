@@ -365,7 +365,7 @@ export default function PoolDetailPage() {
   const teamRowName = (pool.teamRowName ?? "").trim() || "Team 1";
   const teamColName = (pool.teamColName ?? "").trim() || "Team 2";
 
-  /** Show initials (e.g. "JD") or first few chars of owner name for small grid cells (max 3). */
+  /** Show initials (e.g. "JD") or first few chars of owner name for grid cells (multi-word: 2 initials; single: up to 8 chars). */
   const squareLabel = (ownerName: string | null | undefined) => {
     if (!ownerName?.trim()) return "•";
     const s = ownerName.trim();
@@ -373,7 +373,7 @@ export default function PoolDetailPage() {
     if (parts.length >= 2) {
       return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase().slice(0, 2);
     }
-    return s.slice(0, 3).toUpperCase();
+    return s.slice(0, 8).toUpperCase();
   };
 
   const totalSquares = gridSize * gridSize;
