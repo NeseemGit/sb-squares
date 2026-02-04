@@ -1,6 +1,6 @@
 "use client";
 
-import { signUp, confirmSignUp } from "aws-amplify/auth";
+import { confirmSignUp, fetchAuthSession, signIn, signUp } from "aws-amplify/auth";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -76,6 +76,9 @@ export default function SignUpPage() {
         username: email.trim(),
         confirmationCode: code.trim(),
       });
+      // Cognito does not sign the user in after confirm — sign in so they're logged in on redirect
+      await signIn({ username: email.trim(), password });
+      await fetchAuthSession();
       saveSignupProfileAndRedirect();
     } catch (err) {
       const message =
