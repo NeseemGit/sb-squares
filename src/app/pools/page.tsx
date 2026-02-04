@@ -126,7 +126,11 @@ export default function PoolsPage() {
                         const w = pool.winningSquares;
                         if (!w) return false;
                         const arr = JSON.parse(w) as unknown[];
-                        return Array.isArray(arr) && arr.length > 0;
+                        if (!Array.isArray(arr)) return false;
+                        return arr.some(
+                          (s: unknown) =>
+                            Array.isArray(s) && s.length >= 2 && Number(s[0]) >= 0 && Number(s[1]) >= 0,
+                        );
                       } catch {
                         return false;
                       }

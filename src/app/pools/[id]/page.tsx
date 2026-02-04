@@ -231,9 +231,19 @@ export default function PoolDetailPage() {
         return;
       }
       const claimedAt = new Date().toISOString();
-
       const toClaim = [...selectedForClaim];
+      const takenBySomeoneElse: string[] = [];
+
       for (const { square: existing } of toClaim) {
+        const { data: current } = await client.models.Square.get(
+          { id: existing.id },
+          { authMode: "apiKey" },
+        );
+        if (current?.ownerId && current.ownerId !== userId) {
+          takenBySomeoneElse.push(existing.id);
+          setSelectedForClaim((prev) => prev.filter((s) => s.square.id !== existing.id));
+          continue;
+        }
         const result = await client.models.Square.update(
           {
             id: existing.id,
@@ -259,6 +269,17 @@ export default function PoolDetailPage() {
           ),
         );
         setSelectedForClaim((prev) => prev.filter((s) => s.square.id !== existing.id));
+      }
+
+      if (takenBySomeoneElse.length > 0) {
+        setError(
+          "One or more squares were just claimed by someone else. The rest were claimed. Refresh to see the latest.",
+        );
+        const { data: freshSquares } = await client.models.Square.listSquareByPoolId(
+          { poolId: id! },
+          { authMode: "apiKey" },
+        );
+        if (freshSquares) setSquares(freshSquares);
       }
       setClaimDisplayName("");
       // Refetch from DB; merge with optimistic state so stale refetch doesn't wipe claims
@@ -875,7 +896,10 @@ export default function PoolDetailPage() {
         </div>
       )}
 
-      <div className="mt-4 min-h-[2.5rem] sm:min-h-[2.75rem]" aria-hidden />
+      <p className="mt-4 text-center text-xs text-slate-500">
+        Refresh the page to ensure you see the latest grid and claims.
+      </p>
+      <div className="mt-2 min-h-[2.5rem] sm:min-h-[2.75rem]" aria-hidden />
 
     </div>
   );

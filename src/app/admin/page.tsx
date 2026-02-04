@@ -123,7 +123,7 @@ function AdminContent() {
         prizePayouts: form.prizePayouts.trim() || undefined,
         status: "DRAFT",
       });
-      const newPool = (result as { data?: Schema["Pool"]["type"] }).data ?? (result as Schema["Pool"]["type"]);
+      const newPool = (result as unknown as { data?: Schema["Pool"]["type"] }).data ?? (result as unknown as Schema["Pool"]["type"]);
       const poolId = newPool?.id;
       if (!poolId) {
         setError("Pool was created but could not get its id.");
@@ -193,14 +193,15 @@ function AdminContent() {
       const existingKeys = new Set<string>();
       let nextToken: string | null | undefined = undefined;
       do {
-        const result = await client.models.Square.listSquareByPoolId({
-          poolId,
-          ...(nextToken ? { nextToken } : {}),
-        });
+        const result: { data: Schema["Square"]["type"][]; nextToken?: string | null } =
+          await client.models.Square.listSquareByPoolId({
+            poolId,
+            ...(nextToken ? { nextToken } : {}),
+          });
         for (const s of result.data) {
           existingKeys.add(`${s.row}-${s.col}`);
         }
-        nextToken = (result as { nextToken?: string | null }).nextToken ?? null;
+        nextToken = result.nextToken ?? null;
       } while (nextToken);
 
       for (let r = 0; r < gridSize; r++) {
