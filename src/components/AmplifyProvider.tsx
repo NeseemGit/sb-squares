@@ -19,6 +19,12 @@ function isBackendConfigured(config: typeof outputs): boolean {
   return true;
 }
 
+// Configure Amplify in the client bundle so generateClient() works in client components.
+// (Root layout only runs amplify-config on the server.)
+if (isBackendConfigured(outputs)) {
+  Amplify.configure(outputs, { ssr: true });
+}
+
 const BackendConfigContext = React.createContext(false);
 
 export function useBackendConfigured() {
@@ -26,10 +32,6 @@ export function useBackendConfigured() {
 }
 
 const configured = isBackendConfigured(outputs);
-
-if (configured) {
-  Amplify.configure(outputs, { ssr: true });
-}
 
 function BackendSetupBanner() {
   return (

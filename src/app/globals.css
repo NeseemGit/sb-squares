@@ -29,6 +29,14 @@ body {
   @apply bg-slate-950 text-slate-100 antialiased;
 }
 
+/* Loading spinner (used by LoadingSpinner and inline spinners) */
+.loading-spinner {
+  @apply h-6 w-6 animate-spin rounded-full border-2 border-slate-600 border-t-amber-500;
+}
+.loading-spinner-sm {
+  @apply h-4 w-4 border;
+}
+
 /* Links and actions show pointer cursor */
 a,
 button,
@@ -37,6 +45,21 @@ button,
 [type="reset"],
 [role="button"] {
   cursor: pointer;
+}
+
+/* Sticky claim toolbar fade-in */
+@keyframes toolbar-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.toolbar-fade-in {
+  animation: toolbar-fade-in 0.3s ease-out forwards;
 }
 
 /* Pool grid: smaller on mobile, full size on sm+ */

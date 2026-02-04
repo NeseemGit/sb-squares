@@ -7,6 +7,7 @@ import { generateClient } from "aws-amplify/data";
 import type { Schema } from "@/amplify/data/resource";
 import { useAuthenticator } from "@aws-amplify/ui-react";
 import { PoolStatusBadges } from "@/components/PoolStatusBadges";
+import { LoadingScreen, LoadingSpinner } from "@/components/LoadingSpinner";
 
 const client = generateClient<Schema>();
 
@@ -45,6 +46,18 @@ function TrophyIcon({ className }: { className?: string }) {
   );
 }
 
+/** American football icon for selected (unclaimed) squares. Uses asset from public/images. */
+function FootballIcon({ className }: { className?: string }) {
+  return (
+    <img
+      src="/images/football-icon.svg"
+      alt=""
+      className={className ?? "h-4 w-4"}
+      aria-hidden
+    />
+  );
+}
+
 export default function PoolDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -53,16 +66,20 @@ export default function PoolDetailPage() {
   const [pool, setPool] = useState<Schema["Pool"]["type"] | null>(null);
   const [squares, setSquares] = useState<Schema["Square"]["type"][]>([]);
   const [loading, setLoading] = useState(true);
-  const [claiming, setClaiming] = useState<string | null>(null);
   const [unclaiming, setUnclaiming] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const pendingUnclaimIds = useRef<Set<string>>(new Set());
-  /** When set, show modal to enter name/initials before claiming this square. */
-  const [claimTarget, setClaimTarget] = useState<{ row: number; col: number } | null>(null);
+  /** Square ids we just claimed; subscription must not overwrite with stale data until it has the update. */
+  const justClaimedIds = useRef<Set<string>>(new Set());
+  /** Squares the user has selected to claim; Claim bar appears and they can claim all at once. */
+  const [selectedForClaim, setSelectedForClaim] = useState<
+    Array<{ row: number; col: number; square: Schema["Square"]["type"] }>
+  >([]);
   const [claimDisplayName, setClaimDisplayName] = useState("");
-  const [claimModalLoading, setClaimModalLoading] = useState(false);
+  /** True while the claim API request(s) are in flight. */
+  const [claimSubmitting, setClaimSubmitting] = useState(false);
   /** Admin: selecting which square is the winner. */
   const [selectingWinner, setSelectingWinner] = useState(false);
   const [settingWinner, setSettingWinner] = useState(false);
@@ -108,19 +125,24 @@ export default function PoolDetailPage() {
     ).subscribe({
       next: ({ items }) => {
         const pending = pendingUnclaimIds.current;
-        if (pending.size === 0) {
-          setSquares(items);
-          return;
-        }
-        setSquares(
-          items.map((sq) => {
+        const justClaimed = justClaimedIds.current;
+        setSquares((prev) => {
+          let next = items.map((sq) => {
             if (pending.has(sq.id)) {
               if (!sq.ownerId) pending.delete(sq.id);
               return { ...sq, ownerId: undefined, ownerName: undefined, claimedAt: undefined };
             }
+            // Don't overwrite newly claimed squares with stale subscription data
+            if (justClaimed.has(sq.id) && !sq.ownerId) {
+              const p = prev.find((s) => s.id === sq.id);
+              if (p?.ownerId)
+                return { ...sq, ownerId: p.ownerId, ownerName: p.ownerName, claimedAt: p.claimedAt };
+            }
+            if (sq.ownerId) justClaimed.delete(sq.id);
             return sq;
-          }),
-        );
+          });
+          return next;
+        });
       },
     });
     return () => sub.unsubscribe();
@@ -135,94 +157,148 @@ export default function PoolDetailPage() {
     }
   }
 
-  const openClaimModal = async (row: number, col: number) => {
+  const isSelected = (r: number, c: number) =>
+    selectedForClaim.some((s) => s.row === r && s.col === c);
+
+  useEffect(() => {
+    if (selectedForClaim.length === 0 || claimDisplayName !== "") return;
+    const cancelled = { current: false };
+    (async () => {
+      try {
+        const { getCurrentUser } = await import("aws-amplify/auth");
+        const user = await getCurrentUser();
+        const loginId = user?.signInDetails?.loginId ?? "Me";
+        let defaultName = loginId;
+        if (user?.userId) {
+          try {
+            const { data: profiles } = await client.models.UserProfile.listUserProfileByUserId(
+              { userId: user.userId },
+              { authMode: "userPool" },
+            );
+            const profile = profiles[0];
+            if (profile?.displayName?.trim()) defaultName = profile.displayName.trim();
+          } catch {
+            /* use loginId */
+          }
+        }
+        if (!cancelled.current) setClaimDisplayName(defaultName);
+      } catch {
+        if (!cancelled.current) setClaimDisplayName("Me");
+      }
+    })();
+    return () => {
+      cancelled.current = true;
+    };
+  }, [selectedForClaim.length]);
+
+  const handleSelectForClaim = (row: number, col: number, square: Schema["Square"]["type"]) => {
     if (authStatus !== "authenticated") {
       router.push("/login");
       return;
     }
-    setClaimModalLoading(true);
-    try {
-      const { getCurrentUser } = await import("aws-amplify/auth");
-      const user = await getCurrentUser();
-      const userId = user?.userId ?? "";
-      const loginId = user?.signInDetails?.loginId ?? "Me";
-      let defaultName = loginId;
-      if (userId) {
-        try {
-          const { data: profiles } = await client.models.UserProfile.listUserProfileByUserId({
-            userId,
-          });
-          const profile = profiles[0];
-          if (profile?.displayName?.trim()) defaultName = profile.displayName.trim();
-        } catch {
-          /* use loginId */
-        }
-      }
-      setClaimDisplayName(defaultName);
-      setClaimTarget({ row, col });
-    } finally {
-      setClaimModalLoading(false);
+    if (isSelected(row, col)) {
+      setSelectedForClaim((prev) => prev.filter((s) => !(s.row === row && s.col === col)));
+      return;
     }
+    setSelectedForClaim((prev) => [...prev, { row, col, square }]);
   };
 
   const handleClaim = async (displayName?: string) => {
-    if (!claimTarget) return;
-    const { row, col } = claimTarget;
+    if (selectedForClaim.length === 0 || claimSubmitting) return;
     const name = (displayName ?? claimDisplayName).trim() || "Me";
-    setClaimTarget(null);
 
     if (authStatus !== "authenticated") {
       router.push("/login");
       return;
     }
-    const existing = squares.find((s) => s.row === row && s.col === col);
-    if (!existing) {
-      setError("This square isn’t set up yet. Ask the pool admin to initialize the grid.");
+    const alreadyClaimed = selectedForClaim.find((s) => s.square.ownerId);
+    if (alreadyClaimed) {
+      setError("One or more selected squares are already claimed. Clear selection and try again.");
       return;
     }
-    if (existing.ownerId) {
-      setError("This square is already claimed.");
-      return;
-    }
-    const key = `${row}-${col}`;
-    setClaiming(key);
+    setClaimSubmitting(true);
     setError(null);
     try {
-      const { fetchAuthSession } = await import("aws-amplify/auth");
-      const { tokens } = await fetchAuthSession();
-      const idToken = tokens?.idToken?.toString();
-      if (!idToken) {
-        setError("Session expired. Please sign in again.");
-        return;
-      }
-      const res = await fetch("/api/claim-square", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${idToken}`,
-        },
-        body: JSON.stringify({ squareId: existing.id, displayName: name }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError(data.error ?? `Request failed (${res.status})`);
-        return;
-      }
-      const claimedAt = new Date().toISOString();
       const { getCurrentUser } = await import("aws-amplify/auth");
       const user = await getCurrentUser();
       const userId = user?.userId ?? "";
-      setSquares((prev) =>
-        prev.map((s) =>
-          s.id === existing.id
-            ? { ...s, ownerId: userId, ownerName: name, claimedAt }
-            : s,
-        ),
+      if (!userId) {
+        setError("Session expired. Please sign in again.");
+        setClaimSubmitting(false);
+        return;
+      }
+      const claimedAt = new Date().toISOString();
+
+      const toClaim = [...selectedForClaim];
+      for (const { square: existing } of toClaim) {
+        const result = await client.models.Square.update(
+          {
+            id: existing.id,
+            poolId: existing.poolId,
+            row: existing.row,
+            col: existing.col,
+            ownerId: userId,
+            ownerName: name,
+            claimedAt,
+          },
+          { authMode: "userPool" },
+        );
+        const errors = (result as { errors?: unknown[] }).errors;
+        if (errors?.length) {
+          throw new Error(String(errors[0]));
+        }
+        justClaimedIds.current.add(existing.id);
+        setSquares((prev) =>
+          prev.map((s) =>
+            s.id === existing.id
+              ? { ...s, ownerId: userId, ownerName: name, claimedAt }
+              : s,
+          ),
+        );
+        setSelectedForClaim((prev) => prev.filter((s) => s.square.id !== existing.id));
+      }
+      setClaimDisplayName("");
+      // Refetch from DB; merge with optimistic state so stale refetch doesn't wipe claims
+      const applyRefetch = (fresh: Schema["Square"]["type"][] | undefined) => {
+        setSquares((prev) => {
+          const list = fresh ?? [];
+          const merged = list.map((sq) => {
+            if (justClaimedIds.current.has(sq.id) && !sq.ownerId) {
+              const p = prev.find((s) => s.id === sq.id);
+              if (p?.ownerId)
+                return { ...sq, ownerId: p.ownerId, ownerName: p.ownerName, claimedAt: p.claimedAt };
+            }
+            if (sq.ownerId) justClaimedIds.current.delete(sq.id);
+            return sq;
+          });
+          return merged;
+        });
+      };
+      const { data: freshSquares } = await client.models.Square.listSquareByPoolId(
+        { poolId: id! },
+        { authMode: "apiKey" },
+      );
+      applyRefetch(freshSquares ?? undefined);
+      // If refetch was stale (claimed squares still missing), retry once after a short delay
+      const stillPending = [...justClaimedIds.current];
+      if (stillPending.length > 0) {
+        await new Promise((r) => setTimeout(r, 600));
+        const { data: retrySquares } = await client.models.Square.listSquareByPoolId(
+          { poolId: id! },
+          { authMode: "apiKey" },
+        );
+        applyRefetch(retrySquares ?? undefined);
+      }
+      setTimeout(
+        () => toClaim.forEach(({ square: s }) => justClaimedIds.current.delete(s.id)),
+        8000,
       );
     } catch (e) {
-      setError((e as Error).message);
+      const err = e as Error & { errors?: unknown[] };
+      const message = err.message ?? (err.errors?.[0] && String(err.errors[0])) ?? String(e);
+      setError(message);
     } finally {
-      setClaiming(null);
+      setClaimSubmitting(false);
     }
   };
 
@@ -280,30 +356,20 @@ export default function PoolDetailPage() {
     setUnclaiming(key);
     setError(null);
     try {
-      const { fetchAuthSession } = await import("aws-amplify/auth");
-      const { tokens } = await fetchAuthSession();
-      const idToken = tokens?.idToken?.toString();
-      if (!idToken) {
-        setError("Session expired. Please sign in again.");
-        return;
-      }
-      const accessToken = tokens?.accessToken?.toString();
-      const res = await fetch("/api/unclaim-square", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${idToken}`,
+      const result = await client.models.Square.update(
+        {
+          id: existing.id,
+          poolId: existing.poolId,
+          row: existing.row,
+          col: existing.col,
+          ownerId: "",
+          ownerName: "",
+          claimedAt: "",
         },
-        body: JSON.stringify({
-          squareId: existing.id,
-          ...(accessToken ? { accessToken } : {}),
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError(data.error ?? `Request failed (${res.status})`);
-        return;
-      }
+        { authMode: "userPool" },
+      );
+      const errors = (result as { errors?: unknown[] }).errors;
+      if (errors?.length) throw new Error(String(errors[0]));
       pendingUnclaimIds.current.add(existing.id);
       setTimeout(() => pendingUnclaimIds.current.delete(existing.id), 5000);
       setSquares((prev) =>
@@ -311,8 +377,15 @@ export default function PoolDetailPage() {
           s.id === existing.id ? { ...s, ownerId: "", ownerName: "", claimedAt: "" } : s,
         ),
       );
+      const { data: freshSquares } = await client.models.Square.listSquareByPoolId(
+        { poolId: id },
+        { authMode: "apiKey" },
+      );
+      if (freshSquares) setSquares(freshSquares);
     } catch (e) {
-      setError((e as Error).message);
+      const err = e as Error & { errors?: unknown[] };
+      const message = err.message ?? (err.errors?.[0] && String(err.errors[0])) ?? String(e);
+      setError(message);
     } finally {
       setUnclaiming(null);
     }
@@ -322,7 +395,7 @@ export default function PoolDetailPage() {
     return (
       <div className="mx-auto max-w-6xl px-4 py-12">
         {loading ? (
-          <p className="text-slate-400">Loading pool…</p>
+          <LoadingScreen message="Loading pool…" />
         ) : (
           <p className="text-slate-400">Pool not found.</p>
         )}
@@ -382,8 +455,12 @@ export default function PoolDetailPage() {
   const leftCount = totalSquares - claimedCount;
   const myCount = currentUserId ? claimedSquares.filter((s) => s.ownerId === currentUserId).length : 0;
 
+  const showClaimBar = isOpen && selectedForClaim.length > 0;
+
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6 sm:py-12">
+    <div
+      className={`mx-auto max-w-6xl px-4 py-6 sm:py-12 ${showClaimBar ? "pb-24" : ""}`}
+    >
       <header className="mb-6 sm:mb-8">
         <h1 className="mb-1 text-2xl font-bold tracking-tight text-white sm:text-3xl">
           {pool.name}
@@ -445,11 +522,56 @@ export default function PoolDetailPage() {
         </div>
       )}
 
-      <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-3 text-sm text-slate-400">
-        {isOpen
-          ? "Click an empty square to claim it (must be signed in). Add your name or initials to show on the square. Click × on your own square to unclaim."
-          : "This pool is not open for claiming."}
-      </div>
+      {showClaimBar && (
+        <div className="toolbar-fade-in fixed bottom-0 left-0 right-0 z-50 border-t-2 border-[#fbbf24] bg-emerald-950 py-3 shadow-[0_-8px_32px_rgba(0,0,0,0.5)]">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-3 px-4 sm:justify-between">
+            <span className="font-medium text-amber-200">
+              Selected: {selectedForClaim.length} square{selectedForClaim.length !== 1 ? "s" : ""}
+            </span>
+            <label className="flex items-center gap-2 text-slate-300">
+              <span className="text-sm">Name/initials:</span>
+              <input
+                type="text"
+                value={claimDisplayName}
+                onChange={(e) => setClaimDisplayName(e.target.value)}
+                placeholder="Your name or initials"
+                className="w-40 rounded-lg border border-slate-600 bg-slate-800 px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 disabled:opacity-70"
+                maxLength={20}
+                disabled={claimSubmitting}
+                onKeyDown={(e) => e.key === "Enter" && !claimSubmitting && handleClaim()}
+              />
+            </label>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => handleClaim()}
+                disabled={claimSubmitting}
+                className="flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 font-medium text-white hover:bg-amber-500 disabled:cursor-wait disabled:opacity-70"
+              >
+                {claimSubmitting ? (
+                  <>
+                    <LoadingSpinner size="sm" className="shrink-0" />
+                    <span>Claiming…</span>
+                  </>
+                ) : (
+                  `Claim ${selectedForClaim.length} square${selectedForClaim.length !== 1 ? "s" : ""}`
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedForClaim([]);
+                  setClaimDisplayName("");
+                }}
+                disabled={claimSubmitting}
+                className="rounded-lg px-3 py-2 text-slate-300 hover:bg-slate-700 hover:text-white disabled:opacity-50"
+              >
+                Clear selection
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="mb-6 flex flex-wrap items-center gap-x-6 gap-y-3 rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-3 text-sm min-h-[3rem]">
         <span className="shrink-0 font-medium text-slate-300">
@@ -632,39 +754,48 @@ export default function PoolDetailPage() {
                     </span>
                     <button
                       type="button"
-                      disabled={isUnclaiming}
+                      disabled={isUnclaiming || (unclaiming !== null && !isUnclaiming)}
                       onClick={(e) => {
                         e.stopPropagation();
                         handleUnclaim(r, c);
                       }}
-                      className="rounded px-0.5 text-[10px] opacity-90 hover:opacity-100 disabled:opacity-50"
+                      className="flex items-center justify-center rounded px-0.5 text-[10px] opacity-90 hover:opacity-100 disabled:opacity-50 min-w-[1.25rem]"
                       title={square?.ownerId === currentUserId ? "Unclaim (change your mind)" : `Unclaim (admin: was ${square?.ownerName ?? "claimed"})`}
                     >
-                      {isUnclaiming ? "…" : "×"}
+                      {isUnclaiming ? (
+                        <LoadingSpinner size="sm" className="h-3 w-3" />
+                      ) : (
+                        "×"
+                      )}
                     </button>
                   </div>
                 );
               }
+              const selected = isSelected(r, c);
               return (
                 <button
                   key={`${r}-${c}`}
                   type="button"
-                  disabled={!isOpen || claimed || claiming === `${r}-${c}` || claimModalLoading}
-                  onClick={() => (claimed ? undefined : openClaimModal(r, c))}
+                  disabled={!isOpen || claimed || !square || claimSubmitting}
+                  onClick={() => (claimed || !square ? undefined : handleSelectForClaim(r, c, square))}
                   className={`flex flex-col items-center justify-center rounded text-[10px] font-medium transition ${
                     claimed
                       ? "text-white"
-                      : isOpen
-                        ? "bg-slate-700 text-slate-300 hover:bg-slate-600"
-                        : "bg-slate-800 text-slate-500"
+                      : selected
+                        ? "ring-2 ring-[#fbbf24] ring-offset-1 ring-offset-slate-900 bg-emerald-950 text-emerald-100"
+                        : isOpen
+                          ? "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                          : "bg-slate-800 text-slate-500"
                   }`}
                   style={claimed && ownerColors ? { backgroundColor: ownerColors.bg } : undefined}
-                  title={square?.ownerName ? `Claimed by ${square.ownerName}` : isOpen ? "Click to claim" : "Pool closed"}
+                  title={square?.ownerName ? `Claimed by ${square.ownerName}` : isOpen ? (selected ? "Selected — use Claim bar below" : "Click to select, then claim below") : "Pool closed"}
                 >
                   {claimed ? (
                     <span className="truncate max-w-full px-0.5" title={square?.ownerName ?? undefined}>
                       {squareLabel(square?.ownerName)}
                     </span>
+                  ) : selected ? (
+                    <FootballIcon className="h-5 w-5 sm:h-6 sm:w-6 text-amber-200" />
                   ) : (
                     ""
                   )}
@@ -678,6 +809,24 @@ export default function PoolDetailPage() {
           </div>
         </div>
       </div>
+
+      {claimSubmitting && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40" aria-live="polite">
+          <div className="flex items-center gap-3 rounded-xl border border-amber-700/50 bg-slate-800 px-5 py-3 shadow-xl">
+            <LoadingSpinner size="sm" className="shrink-0" />
+            <span className="font-medium text-amber-200">Claiming square…</span>
+          </div>
+        </div>
+      )}
+
+      {unclaiming !== null && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40" aria-live="polite">
+          <div className="flex items-center gap-3 rounded-xl border border-slate-600 bg-slate-800 px-4 py-2.5 shadow-xl">
+            <LoadingSpinner size="sm" className="shrink-0" />
+            <span className="text-sm font-medium text-slate-200">Unclaiming…</span>
+          </div>
+        </div>
+      )}
 
       <div className="mt-4 flex flex-col gap-3 rounded-lg border border-slate-700/80 bg-slate-800/50 px-3 py-2.5 text-xs text-slate-400 sm:px-4 sm:text-sm">
         <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
@@ -722,58 +871,6 @@ export default function PoolDetailPage() {
         </div>
       </div>
 
-      {/* Claim modal: name/initials */}
-      {claimTarget && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
-          onClick={() => setClaimTarget(null)}
-          onKeyDown={(e) => e.key === "Escape" && setClaimTarget(null)}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="claim-modal-title"
-        >
-          <div
-            className="w-full max-w-sm rounded-xl border border-slate-600 bg-slate-800 p-6 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 id="claim-modal-title" className="mb-3 text-lg font-semibold text-white">
-              Claim square
-            </h2>
-            <p className="mb-3 text-sm text-slate-400">
-              Name or initials to show on your square (e.g. JD, Me, Ali):
-            </p>
-            <input
-              type="text"
-              value={claimDisplayName}
-              onChange={(e) => setClaimDisplayName(e.target.value)}
-              placeholder="Your name or initials"
-              className="mb-4 w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
-              maxLength={20}
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleClaim();
-                if (e.key === "Escape") setClaimTarget(null);
-              }}
-            />
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setClaimTarget(null)}
-                className="rounded-lg px-4 py-2 text-slate-300 hover:bg-slate-700 hover:text-white"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => handleClaim()}
-                className="rounded-lg bg-amber-600 px-4 py-2 font-medium text-white hover:bg-amber-500"
-              >
-                Claim
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

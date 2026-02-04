@@ -1,6 +1,6 @@
 "use client";
 
-import { signIn } from "aws-amplify/auth";
+import { fetchAuthSession, signIn } from "aws-amplify/auth";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -22,7 +22,8 @@ export default function LoginPage() {
         username: email.trim(),
         password,
       });
-      // Full page nav so pools loads with session; avoids Authenticator.Provider state lag
+      // Ensure session is persisted before redirect (avoids "Unable to get user session" on /pools)
+      await fetchAuthSession();
       window.location.assign("/pools");
     } catch (err) {
       const message =

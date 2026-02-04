@@ -18,6 +18,8 @@ function AdminContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  /** Shown next to spinner while creating pool + initializing grid. */
+  const [creatingMessage, setCreatingMessage] = useState("");
   const [inAdminsGroup, setInAdminsGroup] = useState<boolean | null>(null);
   const [tokenGroups, setTokenGroups] = useState<string[] | null>(null);
   const [form, setForm] = useState({
@@ -81,18 +83,35 @@ function AdminContent() {
     return () => sub.unsubscribe();
   }, []);
 
+  const countSquaresInPool = async (poolId: string): Promise<number> => {
+    let total = 0;
+    let nextToken: string | null | undefined = undefined;
+    do {
+      const result = await client.models.Square.listSquareByPoolId({
+        poolId,
+        ...(nextToken ? { nextToken } : {}),
+      });
+      total += result.data.length;
+      nextToken = (result as { nextToken?: string | null }).nextToken ?? null;
+    } while (nextToken);
+    return total;
+  };
+
   const createPool = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreating(true);
+    setCreatingMessage("Creating pool…");
     setError(null);
+    const gridSize = form.gridSize;
+    const expectedSquares = gridSize * gridSize;
     try {
       const price =
         form.pricePerSquare === "" ? undefined : Number(form.pricePerSquare);
-      await client.models.Pool.create({
+      const result = await client.models.Pool.create({
         name: form.name,
         description: form.description || undefined,
         eventDate: form.eventDate,
-        gridSize: form.gridSize,
+        gridSize,
         pricePerSquare: price !== undefined && !Number.isNaN(price) ? price : undefined,
         teamRowName: form.teamRowName.trim() || undefined,
         teamColName: form.teamColName.trim() || undefined,
@@ -100,13 +119,37 @@ function AdminContent() {
         prizePayouts: form.prizePayouts.trim() || undefined,
         status: "DRAFT",
       });
-      setForm({ name: "", description: "", eventDate: "", gridSize: 10, pricePerSquare: "", teamRowName: "", teamColName: "", commishNotes: "", prizePayouts: "" });
+      const newPool = (result as { data?: Schema["Pool"]["type"] }).data ?? (result as Schema["Pool"]["type"]);
+      const poolId = newPool?.id;
+      if (!poolId) {
+        setError("Pool was created but could not get its id.");
+        return;
+      }
+      setCreatingMessage(`Initializing grid (${gridSize}×${gridSize})…`);
+      let lastCount = 0;
+      const size = newPool?.gridSize ?? gridSize ?? 10;
+      for (let pass = 0; pass < 3; pass++) {
+        await initSquares(poolId, size);
+        lastCount = await countSquaresInPool(poolId);
+        if (lastCount >= expectedSquares) break;
+        if (pass < 2) {
+          setCreatingMessage(`Completing grid… (${lastCount}/${expectedSquares})`);
+          await new Promise((r) => setTimeout(r, 1200));
+        } else {
+          setError(`Grid has ${lastCount}/${expectedSquares} squares. Click Init on the pool to fill the rest.`);
+        }
+      }
+      if (lastCount >= expectedSquares) {
+        setForm({ name: "", description: "", eventDate: "", gridSize: 10, pricePerSquare: "", teamRowName: "", teamColName: "", commishNotes: "", prizePayouts: "" });
+        setError(null);
+      }
     } catch (e) {
       const err = e as Error & { errors?: unknown[] };
       const message = err.message ?? (err.errors?.[0] && String(err.errors[0])) ?? String(e);
       setError(message);
     } finally {
       setCreating(false);
+      setCreatingMessage("");
     }
   };
 
@@ -119,21 +162,50 @@ function AdminContent() {
   };
 
   const initSquares = async (poolId: string, gridSize: number) => {
-    try {
-      const existing = await client.models.Square.listSquareByPoolId({ poolId });
-      if (existing.data.length > 0) {
-        setError("Squares already exist for this pool.");
-        return;
-      }
-      for (let r = 0; r < gridSize; r++) {
-        for (let c = 0; c < gridSize; c++) {
+    const maxRetries = 3;
+    const retryDelayMs = 800;
+
+    const createWithRetry = async (row: number, col: number) => {
+      let lastErr: Error | null = null;
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
           await client.models.Square.create({
             poolId,
-            row: r,
-            col: c,
+            row,
+            col,
           });
+          return;
+        } catch (e) {
+          lastErr = e as Error;
+          if (attempt < maxRetries - 1) {
+            await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+          }
         }
       }
+      throw lastErr ?? new Error("Create failed");
+    };
+
+    try {
+      const existingKeys = new Set<string>();
+      let nextToken: string | null | undefined = undefined;
+      do {
+        const result = await client.models.Square.listSquareByPoolId({
+          poolId,
+          ...(nextToken ? { nextToken } : {}),
+        });
+        for (const s of result.data) {
+          existingKeys.add(`${s.row}-${s.col}`);
+        }
+        nextToken = (result as { nextToken?: string | null }).nextToken ?? null;
+      } while (nextToken);
+
+      for (let r = 0; r < gridSize; r++) {
+        for (let c = 0; c < gridSize; c++) {
+          if (existingKeys.has(`${r}-${c}`)) continue;
+          await createWithRetry(r, c);
+        }
+      }
+      setError(null);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -310,6 +382,7 @@ function AdminContent() {
       <section className="mb-12 rounded-xl border border-slate-800 bg-slate-900/50 p-6">
         <h2 className="mb-4 text-lg font-semibold text-white">Create pool</h2>
         <form onSubmit={createPool} className="space-y-4">
+          <fieldset disabled={creating} className={creating ? "pointer-events-none opacity-80" : undefined}>
           <div>
             <label htmlFor="name" className="mb-1 block text-sm text-slate-400">
               Name
@@ -438,13 +511,40 @@ function AdminContent() {
               placeholder={"Q1 – 10%\nHalftime – 20%\nQ3 – 20%\nFinal – 50%\n\nFinal score includes overtime."}
             />
           </div>
+          {creating && (
+            <div className="flex items-center gap-3 rounded-lg border border-amber-700/50 bg-amber-900/20 px-4 py-3 text-amber-200">
+              <svg
+                className="h-5 w-5 shrink-0 animate-spin text-amber-400"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                aria-hidden
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                />
+              </svg>
+              <span>{creatingMessage || "Please wait…"}</span>
+            </div>
+          )}
           <button
             type="submit"
             disabled={creating}
             className="rounded-lg bg-amber-600 px-4 py-2 font-medium text-white hover:bg-amber-500 disabled:opacity-50"
           >
-            {creating ? "Creating…" : "Create pool"}
+            {creating ? "Please wait…" : "Create pool"}
           </button>
+          </fieldset>
         </form>
       </section>
 
