@@ -8,6 +8,7 @@ import type { Schema } from "@/amplify/data/resource";
 import { useAuthenticator } from "@aws-amplify/ui-react";
 import { PoolStatusBadges } from "@/components/PoolStatusBadges";
 import { LoadingScreen, LoadingSpinner } from "@/components/LoadingSpinner";
+import { DEFAULT_COMMISH_NOTES } from "@/lib/constants";
 
 const client = generateClient<Schema>();
 
@@ -82,6 +83,8 @@ export default function PoolDetailPage() {
   const [claimSubmitting, setClaimSubmitting] = useState(false);
   /** Admin: selecting which square is the winner. */
   const [selectingWinner, setSelectingWinner] = useState(false);
+  /** Which quarter (0=Q1, 1=Halftime, 2=Q3, 3=Final) we're assigning when selecting winner. */
+  const [selectedQuarterIndex, setSelectedQuarterIndex] = useState(0);
   const [settingWinner, setSettingWinner] = useState(false);
 
   useEffect(() => {
@@ -302,20 +305,35 @@ export default function PoolDetailPage() {
     }
   };
 
-  const winningSquaresArray: [number, number][] = (() => {
+  const QUARTER_LABELS = ["Q1", "Halftime", "Q3", "Final"] as const;
+  const EMPTY_SLOT: [number, number] = [-1, -1];
+
+  const winningSquaresByQuarter: [number, number][] = (() => {
     try {
-      if (pool?.winningSquares) return JSON.parse(pool.winningSquares) as [number, number][];
+      if (!pool?.winningSquares) return [EMPTY_SLOT, EMPTY_SLOT, EMPTY_SLOT, EMPTY_SLOT];
+      const raw = JSON.parse(pool.winningSquares) as unknown;
+      const arr = Array.isArray(raw) ? raw : [];
+      return [0, 1, 2, 3].map((i) => {
+        const s = arr[i];
+        if (s && Array.isArray(s) && s.length >= 2 && Number(s[0]) >= 0 && Number(s[1]) >= 0) return [Number(s[0]), Number(s[1])];
+        return EMPTY_SLOT;
+      });
     } catch {
-      /* ignore */
+      return [EMPTY_SLOT, EMPTY_SLOT, EMPTY_SLOT, EMPTY_SLOT];
     }
-    return [];
   })();
 
-  const toggleWinningSquare = async (row: number, col: number) => {
+  const winningSquaresArray = winningSquaresByQuarter.filter(([r, c]) => r >= 0 && c >= 0);
+
+  const setWinnerForQuarter = async (quarterIndex: number, row: number, col: number) => {
     if (!pool || !isAdmin) return;
-    const next = winningSquaresArray.some(([r, c]) => r === row && c === col)
-      ? winningSquaresArray.filter(([r, c]) => !(r === row && c === col))
-      : [...winningSquaresArray, [row, col]];
+    const next = [...winningSquaresByQuarter];
+    const current = next[quarterIndex];
+    if (current[0] === row && current[1] === col) {
+      next[quarterIndex] = EMPTY_SLOT;
+    } else {
+      next[quarterIndex] = [row, col];
+    }
     const winningSquares = JSON.stringify(next);
     setSettingWinner(true);
     setError(null);
@@ -336,12 +354,13 @@ export default function PoolDetailPage() {
     if (!pool || !isAdmin) return;
     setSettingWinner(true);
     setError(null);
+    const empty = [EMPTY_SLOT, EMPTY_SLOT, EMPTY_SLOT, EMPTY_SLOT];
     try {
       await client.models.Pool.update({
         id: pool.id,
-        winningSquares: "[]",
+        winningSquares: JSON.stringify(empty),
       });
-      setPool((prev) => (prev ? { ...prev, winningSquares: "[]" } : null));
+      setPool((prev) => (prev ? { ...prev, winningSquares: JSON.stringify(empty) } : null));
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -461,6 +480,27 @@ export default function PoolDetailPage() {
     <div
       className={`mx-auto max-w-6xl px-4 py-6 sm:py-12 ${showClaimBar ? "pb-24" : ""}`}
     >
+      {winningSquaresArray.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-emerald-800 bg-emerald-900/30 px-4 py-2 text-emerald-200">
+          <span className="flex items-center gap-2 font-medium">
+            <TrophyIcon className="h-5 w-5 shrink-0 text-emerald-400" />
+            Winners:
+          </span>
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            {winningSquaresByQuarter.map(([wr, wc], qi) => {
+              if (wr < 0 || wc < 0) return null;
+              const sq = squares.find((s) => s.row === wr && s.col === wc);
+              const name = sq?.ownerName?.trim() || "—";
+              return (
+                <span key={`${qi}-${wr}-${wc}`}>
+                  <span className="font-medium text-emerald-300">{QUARTER_LABELS[qi]}:</span> {name}
+                </span>
+              );
+            })}
+          </span>
+        </div>
+      )}
+
       <header className="mb-6 sm:mb-8">
         <h1 className="mb-1 text-2xl font-bold tracking-tight text-white sm:text-3xl">
           {pool.name}
@@ -490,21 +530,18 @@ export default function PoolDetailPage() {
         </div>
       </header>
 
-      {pool.commishNotes?.trim() && (
-        <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-3">
-          <h2 className="mb-2 font-semibold text-slate-200">Commish Notes</h2>
-          <ul className="list-outside list-disc space-y-1 pl-5 text-sm text-slate-400">
-            {pool.commishNotes
-              .trim()
-              .split(/\n+/)
-              .map((line) => line.trim())
-              .filter(Boolean)
-              .map((line, i) => (
-                <li key={i}>{line}</li>
-              ))}
-          </ul>
-        </div>
-      )}
+      <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-3">
+        <h2 className="mb-2 font-semibold text-slate-200">Commish Notes</h2>
+        <ul className="list-outside list-disc space-y-1 pl-5 text-sm text-slate-400">
+          {(pool.commishNotes?.trim() || DEFAULT_COMMISH_NOTES)
+            .split(/\n+/)
+            .map((line) => line.trim())
+            .filter(Boolean)
+            .map((line, i) => (
+              <li key={i}>{line}</li>
+            ))}
+        </ul>
+      </div>
 
       {pool.prizePayouts?.trim() && (
         <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-3">
@@ -594,27 +631,25 @@ export default function PoolDetailPage() {
         )}
       </div>
 
-      {winningSquaresArray.length > 0 && (
-        <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-emerald-800 bg-emerald-900/30 px-4 py-2 text-emerald-200">
-          <span className="flex items-center gap-2 font-medium">
-            <TrophyIcon className="h-5 w-5 shrink-0 text-emerald-400" />
-            Winner{winningSquaresArray.length !== 1 ? "s" : ""}:
-          </span>
-          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            {winningSquaresArray.map(([wr, wc]) => {
-              const sq = squares.find((s) => s.row === wr && s.col === wc);
-              const label = sq?.ownerName?.trim() ? `${sq.ownerName} (${wr + 1}, ${wc + 1})` : `Row ${wr + 1}, Col ${wc + 1}`;
-              return <span key={`${wr}-${wc}`}>{label}</span>;
-            })}
-          </span>
-        </div>
-      )}
-
       {isAdmin && (
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-2 text-sm">
           {selectingWinner ? (
             <>
-              <span className="text-slate-300">Click squares to add or remove winners (click again to remove).</span>
+              <span className="text-slate-300">Select quarter, then click a square to set winner (click same square to clear).</span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {QUARTER_LABELS.map((label, qi) => (
+                  <button
+                    key={qi}
+                    type="button"
+                    onClick={() => setSelectedQuarterIndex(qi)}
+                    className={`rounded px-2.5 py-1 text-sm font-medium ${
+                      selectedQuarterIndex === qi ? "bg-amber-600 text-white" : "bg-slate-600 text-slate-300 hover:bg-slate-500"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
               <button
                 type="button"
                 onClick={() => setSelectingWinner(false)}
@@ -627,7 +662,7 @@ export default function PoolDetailPage() {
             <>
               <button
                 type="button"
-                onClick={() => setSelectingWinner(true)}
+                onClick={() => { setSelectingWinner(true); setSelectedQuarterIndex(0); }}
                 disabled={settingWinner}
                 className="rounded bg-amber-600 px-3 py-1.5 font-medium text-white hover:bg-amber-500 disabled:opacity-50"
               >
@@ -703,21 +738,30 @@ export default function PoolDetailPage() {
               const isWinningSquare = winningSquaresArray.some(([wr, wc]) => wr === r && wc === c);
 
               if (selectingWinner && isAdmin) {
+                const quarterForCell = winningSquaresByQuarter.findIndex(([wr, wc]) => wr === r && wc === c);
+                const isSelectedQuarter = quarterForCell === selectedQuarterIndex;
                 return (
                   <button
                     key={`${r}-${c}`}
                     type="button"
-                    onClick={() => toggleWinningSquare(r, c)}
+                    onClick={() => setWinnerForQuarter(selectedQuarterIndex, r, c)}
                     className={`flex flex-col items-center justify-center gap-0 rounded text-[10px] font-medium transition ${
                       isWinningSquare ? "bg-emerald-600 text-white" : claimed ? "text-white" : "bg-slate-700 text-slate-300 hover:bg-slate-600"
                     }`}
                     style={!isWinningSquare && claimed && ownerColors ? { backgroundColor: ownerColors.bg } : undefined}
-                    title={isWinningSquare ? "Winning square (click to remove)" : "Click to add as winner"}
+                    title={
+                      isWinningSquare
+                        ? `${QUARTER_LABELS[quarterForCell]} winner (click to ${isSelectedQuarter ? "clear" : "change to " + QUARTER_LABELS[selectedQuarterIndex]})`
+                        : `Click to set as ${QUARTER_LABELS[selectedQuarterIndex]} winner`
+                    }
                   >
                     {isWinningSquare ? (
                       <>
                         <TrophyIcon className="h-3.5 w-3.5" />
                         <span className="truncate max-w-full px-0.5">{squareLabel(square?.ownerName)}</span>
+                        {quarterForCell >= 0 && (
+                          <span className="text-[8px] opacity-90">{QUARTER_LABELS[quarterForCell]}</span>
+                        )}
                       </>
                     ) : (
                       <span className="truncate max-w-full px-0.5">{claimed ? squareLabel(square?.ownerName) : ""}</span>
@@ -727,16 +771,19 @@ export default function PoolDetailPage() {
               }
 
               if (isWinningSquare) {
+                const quarterForCell = winningSquaresByQuarter.findIndex(([wr, wc]) => wr === r && wc === c);
+                const quarterLabel = quarterForCell >= 0 ? QUARTER_LABELS[quarterForCell] : "";
                 return (
                   <div
                     key={`${r}-${c}`}
                     className="flex flex-col items-center justify-center gap-0 rounded bg-emerald-600 text-white"
-                    title={square?.ownerName ? `Winner: ${square.ownerName}` : "Winning square"}
+                    title={square?.ownerName ? `${quarterLabel ? quarterLabel + ": " : ""}${square.ownerName}` : "Winning square"}
                   >
                     <TrophyIcon className="h-3.5 w-3.5 shrink-0" />
                     <span className="text-[10px] font-medium leading-tight truncate max-w-full px-0.5" title={square?.ownerName ?? undefined}>
                       {squareLabel(square?.ownerName)}
                     </span>
+                    {quarterLabel && <span className="text-[8px] opacity-90">{quarterLabel}</span>}
                   </div>
                 );
               }
@@ -828,48 +875,7 @@ export default function PoolDetailPage() {
         </div>
       )}
 
-      <div className="mt-4 flex flex-col gap-3 rounded-lg border border-slate-700/80 bg-slate-800/50 px-3 py-2.5 text-xs text-slate-400 sm:px-4 sm:text-sm">
-        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
-          <span className="font-medium text-slate-500">Key:</span>
-          <span className="inline-flex items-center gap-2">
-            <span className="inline-block h-5 w-5 shrink-0 rounded bg-slate-700" aria-hidden />
-            <span>Available</span>
-          </span>
-          <span className="inline-flex items-center gap-2">
-            <span className="inline-block h-5 w-5 shrink-0 rounded bg-slate-800" aria-hidden />
-            <span>Closed / unclaimed</span>
-          </span>
-          <span className="inline-flex items-center gap-2">
-            <span className="inline-block h-5 w-5 shrink-0 rounded" style={{ backgroundColor: colorsForOwner("sample").bg }} aria-hidden />
-            <span>Claimed (initials shown)</span>
-          </span>
-          <span className="inline-flex items-center gap-2">
-            <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded bg-emerald-600 text-white" aria-hidden>
-              <TrophyIcon className="h-3 w-3" />
-            </span>
-            <span>Winning square</span>
-          </span>
-        </div>
-        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 border-t border-slate-700/60 pt-2">
-          <span className="font-medium text-slate-500">Winners:</span>
-          <span className="inline-flex items-center gap-2">
-            <TrophyIcon className="h-4 w-4 shrink-0 text-amber-400" aria-hidden />
-            <span>Q1 Winner</span>
-          </span>
-          <span className="inline-flex items-center gap-2">
-            <TrophyIcon className="h-4 w-4 shrink-0 text-amber-400" aria-hidden />
-            <span>Halftime Winner</span>
-          </span>
-          <span className="inline-flex items-center gap-2">
-            <TrophyIcon className="h-4 w-4 shrink-0 text-amber-400" aria-hidden />
-            <span>Q3 Winner</span>
-          </span>
-          <span className="inline-flex items-center gap-2">
-            <TrophyIcon className="h-4 w-4 shrink-0 text-emerald-400" aria-hidden />
-            <span>Final Winner</span>
-          </span>
-        </div>
-      </div>
+      <div className="mt-4 min-h-[2.5rem] sm:min-h-[2.75rem]" aria-hidden />
 
     </div>
   );

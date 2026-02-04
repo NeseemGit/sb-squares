@@ -203,13 +203,6 @@ export default function HomePage() {
                   <span className="font-medium text-emerald-200">Final Winner</span>
                 </div>
               </div>
-              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-slate-700/60 pt-3 text-xs text-slate-500">
-                <span className="font-medium text-slate-500">Key:</span>
-                <span>Q1 Winner — 1st quarter score</span>
-                <span>Halftime Winner — 2nd quarter</span>
-                <span>Q3 Winner — 3rd quarter</span>
-                <span className="text-emerald-400/90">Final Winner — game final (incl. OT)</span>
-              </div>
             </div>
           </div>
         </section>

@@ -36,7 +36,7 @@ export default function RootLayout({
       <body className="min-h-screen font-sans">
         <AmplifyProvider>
           <div className="flex min-h-screen flex-col">
-            <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur">
+            <header className="border-b-2 border-[#fbbf24] bg-slate-900/80 backdrop-blur">
               <div className="mx-auto flex min-h-16 max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
                 <Link href="/" className="text-xl font-bold text-amber-400">
                   DB Squares
@@ -45,7 +45,7 @@ export default function RootLayout({
               </div>
             </header>
             <main className="flex-1">{children}</main>
-            <footer className="border-t border-slate-800 py-6 text-center text-sm text-slate-500">
+            <footer className="border-t-2 border-[#fbbf24] bg-slate-900 py-6 text-center text-sm text-slate-500">
               Site was developed by{" "}
               <a
                 href="https://neseem.com"
@@ -54,8 +54,7 @@ export default function RootLayout({
                 className="text-slate-400 transition hover:text-amber-400"
               >
                 Neseem.com
-              </a>{" "}
-              © 2026
+              </a>
             </footer>
           </div>
         </AmplifyProvider>

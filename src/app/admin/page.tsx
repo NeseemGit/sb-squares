@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuthenticator } from "@aws-amplify/ui-react";
 import { generateClient } from "aws-amplify/data";
 import { RequireAuth } from "@/components/AuthGuard";
+import { DEFAULT_COMMISH_NOTES } from "@/lib/constants";
 import type { Schema } from "@/amplify/data/resource";
 
 const client = generateClient<Schema>();
@@ -30,7 +31,7 @@ function AdminContent() {
     pricePerSquare: "",
     teamRowName: "",
     teamColName: "",
-    commishNotes: "",
+    commishNotes: DEFAULT_COMMISH_NOTES,
     prizePayouts: "",
   });
   /** Local value while editing commish notes in the pools list. */
@@ -45,6 +46,8 @@ function AdminContent() {
   /** Local values while editing pool name and description in the pools list. */
   const [editingName, setEditingName] = useState<Record<string, string>>({});
   const [editingDescription, setEditingDescription] = useState<Record<string, string>>({});
+  /** Local value while editing event date in the pools list. */
+  const [editingEventDate, setEditingEventDate] = useState<Record<string, string>>({});
   /** Pool id currently being deleted (for loading state). */
   const [deletingPoolId, setDeletingPoolId] = useState<string | null>(null);
 
@@ -87,12 +90,13 @@ function AdminContent() {
     let total = 0;
     let nextToken: string | null | undefined = undefined;
     do {
-      const result = await client.models.Square.listSquareByPoolId({
-        poolId,
-        ...(nextToken ? { nextToken } : {}),
-      });
+      const result: { data: Schema["Square"]["type"][]; nextToken?: string | null } =
+        await client.models.Square.listSquareByPoolId({
+          poolId,
+          ...(nextToken ? { nextToken } : {}),
+        });
       total += result.data.length;
-      nextToken = (result as { nextToken?: string | null }).nextToken ?? null;
+      nextToken = result.nextToken ?? null;
     } while (nextToken);
     return total;
   };
@@ -140,7 +144,7 @@ function AdminContent() {
         }
       }
       if (lastCount >= expectedSquares) {
-        setForm({ name: "", description: "", eventDate: "", gridSize: 10, pricePerSquare: "", teamRowName: "", teamColName: "", commishNotes: "", prizePayouts: "" });
+        setForm({ name: "", description: "", eventDate: "", gridSize: 10, pricePerSquare: "", teamRowName: "", teamColName: "", commishNotes: DEFAULT_COMMISH_NOTES, prizePayouts: "" });
         setError(null);
       }
     } catch (e) {
@@ -331,6 +335,24 @@ function AdminContent() {
         return next;
       });
       setEditingDescription((prev) => {
+        const next = { ...prev };
+        delete next[poolId];
+        return next;
+      });
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  const updateEventDate = async (poolId: string, eventDate: string) => {
+    const trimmed = eventDate.trim();
+    if (!trimmed) return;
+    try {
+      await client.models.Pool.update({
+        id: poolId,
+        eventDate: trimmed,
+      });
+      setEditingEventDate((prev) => {
         const next = { ...prev };
         delete next[poolId];
         return next;
@@ -560,11 +582,46 @@ function AdminContent() {
                 className="overflow-hidden rounded-xl border border-slate-700/80 bg-slate-800/40 shadow-sm"
               >
                 <div className="space-y-6 p-6">
-                  {/* Row 1: Date & grid size — at top */}
-                  <div>
-                    <p className="rounded-lg bg-slate-800/80 px-3 py-2 text-xs font-medium text-slate-400">
-                      {pool.eventDate} · {pool.gridSize}×{pool.gridSize}
+                  {/* Row 1: Event date (editable) & grid size */}
+                  <div className="grid gap-x-4 gap-y-2 sm:grid-cols-[1fr_auto_auto] sm:items-end">
+                    <div className="flex flex-col gap-1">
+                      <label htmlFor={`eventDate-${pool.id}`} className="text-xs font-medium text-slate-500">
+                        Event date
+                      </label>
+                      <input
+                        id={`eventDate-${pool.id}`}
+                        type="date"
+                        className="h-9 min-w-0 rounded-lg border border-slate-600 bg-slate-800/80 px-3 text-sm text-white focus:border-amber-500/50 focus:outline-none focus:ring-1 focus:ring-amber-500/50"
+                        value={
+                          pool.id in editingEventDate
+                            ? editingEventDate[pool.id]
+                            : pool.eventDate ?? ""
+                        }
+                        onChange={(e) =>
+                          setEditingEventDate((prev) => ({
+                            ...prev,
+                            [pool.id]: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                    <p className="flex items-center rounded-lg bg-slate-800/80 px-3 py-2 text-xs font-medium text-slate-400">
+                      {pool.gridSize}×{pool.gridSize} grid
                     </p>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateEventDate(
+                          pool.id,
+                          pool.id in editingEventDate
+                            ? editingEventDate[pool.id]
+                            : pool.eventDate ?? ""
+                        )
+                      }
+                      className="h-9 shrink-0 rounded-lg border border-slate-600 bg-slate-700 px-4 text-sm font-medium text-white hover:bg-slate-600"
+                    >
+                      Save date
+                    </button>
                   </div>
 
                   {/* Row 2: Title & description — same layout as teams */}
@@ -848,7 +905,7 @@ function AdminContent() {
                         value={
                           pool.id in editingCommishNotes
                             ? editingCommishNotes[pool.id]
-                            : pool.commishNotes ?? ""
+                            : pool.commishNotes?.trim() || DEFAULT_COMMISH_NOTES
                         }
                         onChange={(e) =>
                           setEditingCommishNotes((prev) => ({
@@ -865,7 +922,7 @@ function AdminContent() {
                           pool.id,
                           pool.id in editingCommishNotes
                             ? editingCommishNotes[pool.id]
-                            : pool.commishNotes ?? ""
+                            : pool.commishNotes?.trim() || DEFAULT_COMMISH_NOTES
                         )
                       }
                       className="h-9 shrink-0 rounded-lg border border-slate-600 bg-slate-700 px-4 text-sm font-medium text-white hover:bg-slate-600"
