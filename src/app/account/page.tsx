@@ -101,7 +101,7 @@ function AccountContent() {
             type="text"
             value={form.displayName}
             onChange={(e) => setForm((f) => ({ ...f, displayName: e.target.value }))}
-            placeholder="e.g. Ali or JD"
+            placeholder="e.g. NI or Lions"
             className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
             maxLength={100}
           />

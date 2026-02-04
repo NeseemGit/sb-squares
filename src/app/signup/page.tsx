@@ -164,7 +164,7 @@ export default function SignUpPage() {
               type="text"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="e.g. Ali or JD"
+              placeholder="e.g. NI or Lions"
               className={inputClass}
               autoComplete="nickname"
             />
