@@ -50,6 +50,11 @@ function AdminContent() {
   const [editingEventDate, setEditingEventDate] = useState<Record<string, string>>({});
   /** Pool id currently being deleted (for loading state). */
   const [deletingPoolId, setDeletingPoolId] = useState<string | null>(null);
+  /** Pool selected for "claims by user" section; null = none. */
+  const [claimsPoolId, setClaimsPoolId] = useState<string | null>(null);
+  /** For selected pool: list of { display name, owner id, count }. */
+  const [claimsByUser, setClaimsByUser] = useState<{ display: string; ownerId: string; count: number }[]>([]);
+  const [loadingClaims, setLoadingClaims] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -85,6 +90,53 @@ function AdminContent() {
     client.models.Pool.list().then(() => setLoading(false)).catch(() => {});
     return () => sub.unsubscribe();
   }, []);
+
+  /** Load claimed squares for the selected pool and aggregate by user. */
+  useEffect(() => {
+    if (!claimsPoolId) {
+      setClaimsByUser([]);
+      return;
+    }
+    let cancelled = false;
+    setLoadingClaims(true);
+    (async () => {
+      const byUser = new Map<string, { display: string; count: number }>();
+      let nextToken: string | null | undefined = undefined;
+      try {
+        do {
+          const result: { data: Schema["Square"]["type"][]; nextToken?: string | null } =
+            await client.models.Square.listSquareByPoolId({
+              poolId: claimsPoolId,
+              ...(nextToken ? { nextToken } : {}),
+            });
+          if (cancelled) return;
+          for (const sq of result.data) {
+            if (!sq.ownerId) continue;
+            const existing = byUser.get(sq.ownerId);
+            const display = (sq.ownerName?.trim() || sq.ownerId) || "—";
+            if (existing) {
+              existing.count += 1;
+            } else {
+              byUser.set(sq.ownerId, { display, count: 1 });
+            }
+          }
+          nextToken = result.nextToken ?? null;
+        } while (nextToken);
+        if (cancelled) return;
+        const list = [...byUser.entries()]
+          .map(([ownerId, { display, count }]) => ({ ownerId, display, count }))
+          .sort((a, b) => b.count - a.count);
+        setClaimsByUser(list);
+      } catch (e) {
+        if (!cancelled) setError((e as Error).message);
+      } finally {
+        if (!cancelled) setLoadingClaims(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [claimsPoolId]);
 
   const countSquaresInPool = async (poolId: string): Promise<number> => {
     let total = 0;
@@ -569,6 +621,87 @@ function AdminContent() {
           </button>
           </fieldset>
         </form>
+      </section>
+
+      <section className="mb-12 rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+        <h2 className="mb-4 text-lg font-semibold text-white">Squares claimed by user</h2>
+        <p className="mb-4 text-sm text-slate-400">
+          See how many squares each user has claimed in a pool.
+        </p>
+        <div className="mb-4">
+          <label htmlFor="claims-pool" className="mb-1 block text-sm text-slate-500">
+            Pool
+          </label>
+          <select
+            id="claims-pool"
+            value={claimsPoolId ?? ""}
+            onChange={(e) => setClaimsPoolId(e.target.value || null)}
+            className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-white focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+          >
+            <option value="">Select a pool…</option>
+            {pools.map((pool) => (
+              <option key={pool.id} value={pool.id}>
+                {pool.name ?? "Untitled"} ({pool.gridSize}×{pool.gridSize})
+              </option>
+            ))}
+          </select>
+        </div>
+        {claimsPoolId && (
+          <>
+            {loadingClaims ? (
+              <p className="text-slate-400">Loading…</p>
+            ) : claimsByUser.length === 0 ? (
+              <p className="text-slate-400">No claimed squares in this pool yet.</p>
+            ) : (() => {
+              const claimsPool = pools.find((p) => p.id === claimsPoolId);
+              const pricePerSquare = claimsPool?.pricePerSquare ?? undefined;
+              const hasPrice = typeof pricePerSquare === "number" && !Number.isNaN(pricePerSquare) && pricePerSquare >= 0;
+              const formatAmount = (count: number) =>
+                hasPrice ? `$${(count * pricePerSquare!).toFixed(2)}` : "—";
+              const totalSquares = claimsByUser.reduce((sum, u) => sum + u.count, 0);
+              const totalAmount = hasPrice ? totalSquares * pricePerSquare! : 0;
+              return (
+                <div className="overflow-x-auto rounded-lg">
+                  {hasPrice && (
+                    <p className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-3 py-1.5 text-sm font-medium text-amber-200 ring-1 ring-amber-500/20">
+                      <span className="text-amber-400">${Number(pricePerSquare).toFixed(2)}</span>
+                      <span className="text-slate-400">per square</span>
+                    </p>
+                  )}
+                  <table className="w-full min-w-[260px] text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-700 bg-slate-800/80">
+                        <th className="px-4 py-2 font-medium text-slate-300">User</th>
+                        <th className="px-4 py-2 font-medium text-slate-300 text-right">Squares</th>
+                        <th className="px-4 py-2 font-medium text-emerald-400 text-right">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {claimsByUser.map(({ ownerId, display, count }) => (
+                        <tr key={ownerId} className="border-b border-slate-700/60 last:border-0">
+                          <td className="px-4 py-2 text-white">{display}</td>
+                          <td className="px-4 py-2 text-right font-medium text-slate-200">{count}</td>
+                          <td className="px-4 py-2 text-right font-medium text-emerald-400">{formatAmount(count)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t-2 border-slate-600 bg-slate-800/60 font-medium">
+                        <td className="px-4 py-2 text-slate-300">Total</td>
+                        <td className="px-4 py-2 text-right text-slate-200">{totalSquares}</td>
+                        <td className="px-4 py-2 text-right text-slate-200">
+                          <span className={hasPrice ? "text-emerald-400" : ""}>
+                            {hasPrice ? `$${totalAmount.toFixed(2)}` : "—"}
+                          </span>
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              );
+            })()}
+          </>
+        )}
       </section>
 
       <section>
