@@ -91,6 +91,25 @@ function AccountContent() {
         Set the name and email shown when you claim squares. This will be used as the default on pools.
       </p>
 
+      {userId && (
+        <div className="mb-6 rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-3">
+          <p className="mb-1 text-xs font-medium text-slate-500">Your user ID</p>
+          <p className="mb-2 truncate font-mono text-sm text-slate-300" title={userId}>
+            {userId}
+          </p>
+          <button
+            type="button"
+            onClick={() => void navigator.clipboard.writeText(userId)}
+            className="text-xs text-amber-400 hover:text-amber-300"
+          >
+            Copy ID
+          </button>
+          <p className="mt-1 text-xs text-slate-500">
+            Share this with the pool admin if they need to assign a square back to you (e.g. after an accidental unclaim).
+          </p>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-4 rounded-xl border border-slate-700 bg-slate-900/50 p-6">
         <div>
           <label htmlFor="displayName" className="mb-1 block text-sm font-medium text-slate-300">

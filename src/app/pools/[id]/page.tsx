@@ -86,6 +86,16 @@ export default function PoolDetailPage() {
   /** Which quarter (0=Q1, 1=Halftime, 2=Q3, 3=Final) we're assigning when selecting winner. */
   const [selectedQuarterIndex, setSelectedQuarterIndex] = useState(0);
   const [settingWinner, setSettingWinner] = useState(false);
+  /** Admin: assign unclaimed square to a user (fix accidental unclaim). */
+  const [assignSquareMode, setAssignSquareMode] = useState(false);
+  const [assigningSquare, setAssigningSquare] = useState<{
+    row: number;
+    col: number;
+    square: Schema["Square"]["type"];
+  } | null>(null);
+  const [assignUserId, setAssignUserId] = useState("");
+  const [assignDisplayName, setAssignDisplayName] = useState("");
+  const [assignSubmitting, setAssignSubmitting] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -431,6 +441,43 @@ export default function PoolDetailPage() {
     }
   };
 
+  const handleAssignSquare = async () => {
+    if (!assigningSquare || !assignUserId.trim() || !assignDisplayName.trim()) return;
+    setAssignSubmitting(true);
+    setError(null);
+    try {
+      const { id, poolId, row, col } = assigningSquare.square;
+      const claimedAt = new Date().toISOString();
+      await client.models.Square.update(
+        {
+          id,
+          poolId,
+          row,
+          col,
+          ownerId: assignUserId.trim(),
+          ownerName: assignDisplayName.trim(),
+          claimedAt,
+        },
+        { authMode: "userPool" },
+      );
+      setSquares((prev) =>
+        prev.map((s) =>
+          s.id === id
+            ? { ...s, ownerId: assignUserId.trim(), ownerName: assignDisplayName.trim(), claimedAt }
+            : s,
+        ),
+      );
+      setAssigningSquare(null);
+      setAssignUserId("");
+      setAssignDisplayName("");
+    } catch (e) {
+      const err = e as Error & { errors?: unknown[] };
+      setError(err.message ?? (err.errors?.[0] && String(err.errors[0])) ?? String(e));
+    } finally {
+      setAssignSubmitting(false);
+    }
+  };
+
   if (loading || !pool) {
     return (
       <div className="mx-auto max-w-6xl px-4 py-12">
@@ -679,6 +726,17 @@ export default function PoolDetailPage() {
                 Done
               </button>
             </>
+          ) : assignSquareMode ? (
+            <>
+              <span className="text-slate-300">Click an empty square to assign it to a user (fix accidental unclaim).</span>
+              <button
+                type="button"
+                onClick={() => setAssignSquareMode(false)}
+                className="rounded bg-slate-600 px-2 py-1 text-slate-200 hover:bg-slate-500"
+              >
+                Cancel
+              </button>
+            </>
           ) : (
             <>
               <button
@@ -688,6 +746,13 @@ export default function PoolDetailPage() {
                 className="rounded bg-amber-600 px-3 py-1.5 font-medium text-white hover:bg-amber-500 disabled:opacity-50"
               >
                 Set winning squares
+              </button>
+              <button
+                type="button"
+                onClick={() => setAssignSquareMode(true)}
+                className="rounded border border-slate-600 px-3 py-1.5 text-slate-300 hover:bg-slate-700"
+              >
+                Assign square to user
               </button>
               {winningSquaresArray.length > 0 && (
                 <button
@@ -752,7 +817,7 @@ export default function PoolDetailPage() {
             {Array.from({ length: gridSize }, (_, c) => {
               const square = grid.find((g) => g.row === r && g.col === c)?.square;
               const claimed = !!square?.ownerId;
-              const canUnclaim = claimed && (isAdmin || square?.ownerId === currentUserId);
+              const canUnclaim = claimed && (isAdmin || (isOpen && square?.ownerId === currentUserId));
               const unclaimKey = `unclaim-${r}-${c}`;
               const isUnclaiming = unclaiming === unclaimKey;
               const ownerColors = square?.ownerId ? colorsForOwner(square.ownerId) : null;
@@ -840,12 +905,21 @@ export default function PoolDetailPage() {
                 );
               }
               const selected = isSelected(r, c);
+              const isAssignModeClick = assignSquareMode && isAdmin && !claimed && square;
               return (
                 <button
                   key={`${r}-${c}`}
                   type="button"
                   disabled={!isOpen || claimed || !square || claimSubmitting}
-                  onClick={() => (claimed || !square ? undefined : handleSelectForClaim(r, c, square))}
+                  onClick={() => {
+                    if (claimed || !square) return;
+                    if (isAssignModeClick) {
+                      setAssigningSquare({ row: r, col: c, square });
+                      setAssignSquareMode(false);
+                      return;
+                    }
+                    handleSelectForClaim(r, c, square);
+                  }}
                   className={`flex flex-col items-center justify-center rounded text-[10px] font-medium transition ${
                     claimed
                       ? "text-white"
@@ -854,9 +928,19 @@ export default function PoolDetailPage() {
                         : isOpen
                           ? "bg-slate-700 text-slate-300 hover:bg-slate-600"
                           : "bg-slate-800 text-slate-500"
-                  }`}
+                  } ${isAssignModeClick ? "ring-2 ring-amber-400 ring-offset-1 ring-offset-slate-900" : ""}`}
                   style={claimed && ownerColors ? { backgroundColor: ownerColors.bg } : undefined}
-                  title={square?.ownerName ? `Claimed by ${square.ownerName}` : isOpen ? (selected ? "Selected — use Claim bar below" : "Click to select, then claim below") : "Pool closed"}
+                  title={
+                    square?.ownerName
+                      ? `Claimed by ${square.ownerName}`
+                      : isAssignModeClick
+                        ? "Click to assign this square to a user"
+                        : isOpen
+                          ? selected
+                            ? "Selected — use Claim bar below"
+                            : "Click to select, then claim below"
+                          : "Pool closed"
+                  }
                 >
                   {claimed ? (
                     <span className="truncate max-w-full px-0.5" title={square?.ownerName ?? undefined}>
@@ -883,6 +967,71 @@ export default function PoolDetailPage() {
           <div className="flex items-center gap-3 rounded-xl border border-amber-700/50 bg-slate-800 px-5 py-3 shadow-xl">
             <LoadingSpinner size="sm" className="shrink-0" />
             <span className="font-medium text-amber-200">Claiming square…</span>
+          </div>
+        </div>
+      )}
+
+      {assigningSquare !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" aria-modal="true" role="dialog" aria-labelledby="assign-square-title">
+          <div className="w-full max-w-sm rounded-xl border border-slate-600 bg-slate-800 p-5 shadow-xl">
+            <h2 id="assign-square-title" className="mb-3 text-lg font-semibold text-white">
+              Assign square (row {assigningSquare.row + 1}, col {assigningSquare.col + 1}) to user
+            </h2>
+            <p className="mb-4 text-xs text-slate-400">
+              Use this to fix an accidental unclaim. Get the user&apos;s ID from Admin → Squares claimed by user (copy from another of their squares).
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label htmlFor="assign-user-id" className="mb-1 block text-sm font-medium text-slate-300">
+                  User ID
+                </label>
+                <input
+                  id="assign-user-id"
+                  type="text"
+                  value={assignUserId}
+                  onChange={(e) => setAssignUserId(e.target.value)}
+                  placeholder="Cognito user sub (e.g. abc123…)"
+                  className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  autoComplete="off"
+                />
+              </div>
+              <div>
+                <label htmlFor="assign-display-name" className="mb-1 block text-sm font-medium text-slate-300">
+                  Display name
+                </label>
+                <input
+                  id="assign-display-name"
+                  type="text"
+                  value={assignDisplayName}
+                  onChange={(e) => setAssignDisplayName(e.target.value)}
+                  placeholder="e.g. John or LLL"
+                  className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  autoComplete="off"
+                />
+              </div>
+            </div>
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                onClick={handleAssignSquare}
+                disabled={assignSubmitting || !assignUserId.trim() || !assignDisplayName.trim()}
+                className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-500 disabled:opacity-50"
+              >
+                {assignSubmitting ? "Saving…" : "Assign"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAssigningSquare(null);
+                  setAssignUserId("");
+                  setAssignDisplayName("");
+                }}
+                disabled={assignSubmitting}
+                className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}

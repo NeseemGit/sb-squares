@@ -55,6 +55,9 @@ function AdminContent() {
   /** For selected pool: list of { display name, owner id, count }. */
   const [claimsByUser, setClaimsByUser] = useState<{ display: string; ownerId: string; count: number }[]>([]);
   const [loadingClaims, setLoadingClaims] = useState(false);
+  /** All user profiles (admin list). */
+  const [allUsers, setAllUsers] = useState<Schema["UserProfile"]["type"][]>([]);
+  const [loadingAllUsers, setLoadingAllUsers] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -90,6 +93,36 @@ function AdminContent() {
     client.models.Pool.list().then(() => setLoading(false)).catch(() => {});
     return () => sub.unsubscribe();
   }, []);
+
+  /** Load all user profiles (admin only). */
+  useEffect(() => {
+    if (inAdminsGroup !== true) return;
+    let cancelled = false;
+    setLoadingAllUsers(true);
+    (async () => {
+      try {
+        const items: Schema["UserProfile"]["type"][] = [];
+        let nextToken: string | null | undefined = undefined;
+        do {
+          const result: { data: Schema["UserProfile"]["type"][]; nextToken?: string | null } =
+            await client.models.UserProfile.list({
+              ...(nextToken ? { nextToken } : {}),
+            });
+          if (cancelled) return;
+          items.push(...result.data);
+          nextToken = result.nextToken ?? null;
+        } while (nextToken);
+        if (!cancelled) setAllUsers(items);
+      } catch (e) {
+        if (!cancelled) setError((e as Error).message);
+      } finally {
+        if (!cancelled) setLoadingAllUsers(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [inAdminsGroup]);
 
   /** Load claimed squares for the selected pool and aggregate by user. */
   useEffect(() => {
@@ -624,6 +657,53 @@ function AdminContent() {
       </section>
 
       <section className="mb-12 rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+        <h2 className="mb-4 text-lg font-semibold text-white">All users</h2>
+        <p className="mb-4 text-sm text-slate-400">
+          User IDs and names for assigning squares or support. Copy ID to use in Assign square on a pool.
+        </p>
+        {loadingAllUsers ? (
+          <p className="text-slate-400">Loading users…</p>
+        ) : allUsers.length === 0 ? (
+          <p className="text-slate-400">No user profiles yet. Users appear here after they sign up and visit the app.</p>
+        ) : (
+          <div className="overflow-x-auto rounded-lg">
+            <table className="w-full min-w-[320px] text-left text-sm">
+              <thead>
+                <tr className="border-b border-slate-700 bg-slate-800/80">
+                  <th className="px-4 py-2 font-medium text-slate-300">Display name</th>
+                  <th className="px-4 py-2 font-medium text-slate-300">Email</th>
+                  <th className="px-4 py-2 font-medium text-slate-300">User ID</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...allUsers]
+                  .sort((a, b) => (a.displayName ?? "").localeCompare(b.displayName ?? ""))
+                  .map((profile) => (
+                    <tr key={profile.id} className="border-b border-slate-700/60 last:border-0">
+                      <td className="px-4 py-2 text-white">{profile.displayName ?? "—"}</td>
+                      <td className="px-4 py-2 text-slate-300">{profile.email ?? "—"}</td>
+                      <td className="px-4 py-2 font-mono text-slate-400">
+                        <span className="mr-2 truncate max-w-[12rem] inline-block align-bottom" title={profile.userId}>
+                          {profile.userId}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => void navigator.clipboard.writeText(profile.userId)}
+                          className="text-xs text-amber-400 hover:text-amber-300"
+                          title="Copy user ID"
+                        >
+                          Copy ID
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="mb-12 rounded-xl border border-slate-800 bg-slate-900/50 p-6">
         <h2 className="mb-4 text-lg font-semibold text-white">Squares claimed by user</h2>
         <p className="mb-4 text-sm text-slate-400">
           See how many squares each user has claimed in a pool.
@@ -679,7 +759,19 @@ function AdminContent() {
                     <tbody>
                       {claimsByUser.map(({ ownerId, display, count }) => (
                         <tr key={ownerId} className="border-b border-slate-700/60 last:border-0">
-                          <td className="px-4 py-2 text-white">{display}</td>
+                          <td className="px-4 py-2 text-white">
+                            <span className="mr-2">{display}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                void navigator.clipboard.writeText(ownerId);
+                              }}
+                              className="text-xs text-slate-500 hover:text-amber-400"
+                              title="Copy user ID (use in Assign square on pool page)"
+                            >
+                              Copy ID
+                            </button>
+                          </td>
                           <td className="px-4 py-2 text-right font-medium text-slate-200">{count}</td>
                           <td className="px-4 py-2 text-right font-medium text-emerald-400">{formatAmount(count)}</td>
                         </tr>
